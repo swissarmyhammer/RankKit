@@ -1,0 +1,8 @@
+.claude/settings.local.json
+.sah/
+.shell/
+.validators/
+.code-context/
+.build/
+.swiftpm/
+.DS_Store
