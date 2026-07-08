@@ -1,7 +1,5 @@
 ---
-depends_on:
-- 01KWYFZVZJ47QGJ7ZSY79TFD0K
-- 01KWYG02NSB135TJPQ0EA8BXXT
+depends_on: []
 position_column: todo
 position_ordinal: '9480'
 title: Verify downstream dependents build against migrated CCK and FMR

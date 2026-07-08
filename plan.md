@@ -1,8 +1,9 @@
 # RankKit — extract the shared search/ranking primitives
 
 Extract the hybrid-search primitives duplicated between `../CodeContextKit` and
-`../FoundationModelsMetadataRegistry` into this package, then make both repos
-depend on it. This is the extraction FoundationModelsMetadataRegistry's own
+`../FoundationModelsMetadataRegistry` into this package so both repos can
+depend on it. This plan covers **only RankKit** — each consumer's migration is
+a separate job, planned in that repo (§6a). This is the extraction FoundationModelsMetadataRegistry's own
 plan.md pre-authorized (decision #9: *"Port, don't depend … extract a shared
 micro-package only if a third copy appears"* — it even sketched the name,
 "SwiftRankFusion"). RankKit is that package; any next consumer becomes the
@@ -73,20 +74,25 @@ reimplement the identical pipeline against their own snapshot type:
 
 **Goals**
 - One canonical copy of the retrieval primitives, with the tests that prove
-  them, consumed by both repos as a SwiftPM dependency.
-- Zero behavior change in either consumer in phase 1 — file moves + renames,
-  proven by porting the existing tests verbatim.
-- The selection tier generalized into RankKit, and CodeContextKit's
-  `search code` gaining an agent-selection mode over its RRF candidates
-  (phases 3–4) — the one deliberate new capability.
+  them, ready for both sibling repos to consume as a SwiftPM dependency.
+- Behavior preserved: the ports are verbatim (modulo the §4 renames), proven
+  by porting the existing tests from both repos.
+- The selection tier generalized behind narrow protocols, fronted by the
+  one-call `Searcher` facade and a runnable example (§3a).
 - Neutral naming: nothing in RankKit may mention chunks, symbols, catalogs,
   or metadata.
 
 **Non-goals**
 - No new ranking *signals*, no persistence, no vector store.
-- No attempt to make CCK and FMR share a corpus/index type — only the
-  primitives, the fusion pipeline (phase 2), and the selection tier
-  (phase 3) over narrow protocols.
+- **No changes to CodeContextKit or FoundationModelsMetadataRegistry from
+  this repo.** This plan builds RankKit; each consumer's migration onto it
+  (and CodeContextKit's future agent-selection search mode) is a separate
+  job, planned and executed in that repo. Their code is referenced here only
+  as the *source* being ported and the behavioral reference the ported tests
+  encode.
+- No attempt to make the consumers share a corpus/index type — only the
+  primitives, the fusion pipeline, and the selection tier over narrow
+  protocols.
 
 ## 3. Package design
 
@@ -219,21 +225,16 @@ the example targets, never the library.
      `idFieldWeight`)
    - `BM25.bodyFieldWeight = 1.0` (CCK already uses this name; FMR calls it
      `blockFieldWeight`)
-   Call sites in each consumer update mechanically (CCK: `SearchCorpus.
-   preprocessRow`, `SearchCode.computeTrigramRanking`; FMR: `MetadataIndex`,
-   `MetadataSearcher.computeTrigramRanking`).
 2. **`TextEmbedding`** — already identical; take the signature as-is. Doc
    comment rewritten neutrally ("conformers embed a batch of texts; tests
    substitute a deterministic double").
-3. **`RoutedEmbedderAdapter`** — take FMR's copy verbatim (calls Router's
-   current `embed(_:)`). Deleting CCK's stale-labeled copy in favor of this
-   one silently fixes CCK's drift against Router `main`.
+3. **`RoutedEmbedderAdapter`** — take FMR's copy verbatim (it calls Router's
+   current `embed(_:)`; CCK's copy carries a stale label and is not the
+   canonical source).
 4. **Access control** — everything moved stays `public` exactly as it is
-   today. Each consumer adds `@_exported import RankKit` (or plain `import`
-   plus local `typealias`es, decided per repo at migration time) so *their*
-   public APIs that expose `Hit`/`Signals`/`TextEmbedding` (`SearchCodeMatch.
-   hit`, FMR's `Match.signals`, both packages' `init(embedder:)` seams) don't
-   break downstream source.
+   today, so consumers can re-export (`@_exported import RankKit` or local
+   typealiases) during their own migrations without breaking their public
+   APIs. How each does that is their migration's call, not this plan's.
 
 ## 5. Tests that move
 
@@ -252,58 +253,49 @@ The consumers keep their pipeline-level tests (`SearchCodeTests`,
 primitives transitively and are the no-behavior-change proof during
 migration.
 
-## 6. Phases
+## 6. Phases (all within this repo)
 
-**Phase 1 — extract the identical files (this is the whole immediate ask)**
-1. Scaffold `Package.swift`, `README.md`, family CI workflow in this repo.
+**Phase 1 — extract the identical files**
+1. Scaffold `Package.swift`, `README.md` stub, family CI workflow.
 2. Move the six core files + adapter per §3/§4; port tests per §5.
-3. `swift test` green here; push to `github.com/swissarmyhammer/RankKit`.
-4. Migrate **FMR**: delete `Search/`, `Embedding/`; add the RankKit
-   dependency; rename `idFieldWeight`/`blockFieldWeight` call sites; full test
-   suite green with no test-body edits other than imports.
-5. Migrate **CCK**: delete `Search/{BM25,Trigram,Tokenizer,RRF,Hit}.swift`,
-   `Embedding/`; add RankKit; rename `symbolPathFieldWeight` call sites;
-   suite green. (`SearchCorpus.swift` stays — it's storage, not primitives.)
+3. `swift test` green; push `main` to `github.com/swissarmyhammer/RankKit`
+   so consumers can resolve the dependency whenever they migrate.
 
-**Phase 2 — unify the duplicated pipeline (recommended follow-up, separate PR)**
-Extract into RankKit the logic §1 lists as structurally duplicated:
-- `SignalWeights` (bm25/trigram/cosine, defaults 1.0) replacing
-  `SearchWeights`/`Weights`.
+**Phase 2 — unify the duplicated pipeline**
+Extract the logic §1 lists as structurally duplicated:
+- `SignalWeights` (bm25/trigram/cosine, defaults 1.0) — one weights type
+  where each source repo has its own.
 - `RankedDocument` value type: `init(primaryText:bodyText:)` precomputes the
   weighted term-frequency map, term set, document length, and both trigram
-  sets — replaces `SearchCorpus.preprocessRow` and `MetadataIndex`'s
-  equivalent.
+  sets (behavioral reference: `SearchCorpus.preprocessRow` and
+  `MetadataIndex`'s build).
 - `HybridRanker`: given per-document `RankedDocument`s, optional cosine
   scores, and `SignalWeights`, produce the fused, `[0,1]`-normalized,
   tie-broken ranking plus per-document raw `Signals` — encoding the
-  absent-signal rule and `rankingOfPositiveScores` once. `SearchCode.run`
-  and `MetadataSearcher.retrievalSearch`/`rankEntireCatalog` become thin
-  mappings from their snapshot/index into it.
-- `CosineScoring`: CCK's `matvecCosineScores` (vDSP, contiguous matrix) and
-  FMR's scalar `cosineSimilarity`, side by side — FMR's `MetadataIndex` can
-  then adopt the matrix path its plan.md reserved as a seam, or not.
+  absent-signal rule and `rankingOfPositiveScores` once. Two output shapes:
+  top-K matches-only, and full-catalog ordering with a zero-scored tail (the
+  selection tier's over-budget candidate source) — so any consumer's
+  snapshot/index can map into it.
+- `CosineScoring`: the vDSP contiguous-matrix matvec and the scalar
+  per-row form, side by side, both available to any consumer.
 
-**Phase 3 — generalize the selection tier into RankKit**
+**Phase 3 — generalize the selection tier, the facade, and the example**
 
-CCK wanting agent selection for `search code` makes it the second consumer,
-so FMR's tier moves here rather than being copied. The coupling is narrow —
-`SelectionTier` touches its index only via `index.ids`, `item(forId:)`,
-`block(forId:)`, and `renderSummaryBlock()` — so the generalization is:
+The coupling is narrow — the source tier touches its index only via ids,
+per-id item/block lookup, and summary rendering — so the generalization is:
 
-- `SelectionCatalog` protocol (the seam replacing `MetadataIndex<Item>`):
+- `SelectionCatalog` protocol (the seam replacing the source's index type):
   `ids: [String]`, `summaryBlock(forId:) -> String?` (seeds the prefix),
-  `block(forId:) -> String?` (the verbatim result payload). FMR's
-  `MetadataIndex` conforms trivially; CCK conforms a thin view over
-  `SearchCorpusSnapshot` (id = chunk id, summary = symbol path + kind +
-  `file:start-end`, block = chunk text).
+  `block(forId:) -> String?` (the verbatim result payload). Any index or
+  snapshot type can conform trivially.
 - Move `SelectionTier`, `SelectionConfig` (session factory, preamble,
   `capacityCharacterLimit`, `candidateLimit`), `Selection` (`@Generable` —
   brings the FoundationModels system framework import, fine at the macOS 27
   floor), `AgentSession`, and `idEnumGrammar(ids:)` (already uses Router's
   `Grammar`, which RankKit links anyway).
-- Neutral diagnostics: RankKit needs its own small diagnostic enum for
-  `.retrievalCut(considered:kept:)` / `.unknownSelectedId(id:)`; FMR maps it
-  into `MetadataDiagnostic`, CCK into its logging.
+- Neutral diagnostics: a small `RankDiagnostic` enum for
+  `.retrievalCut(considered:kept:)` / `.unknownSelectedId(id:)`; consumers
+  map it into their own diagnostics or logging.
 - Everything selection-shaped keeps its semantics verbatim: under-budget
   cached-root + fork-per-call, over-budget retrieval top-M into a one-off
   session, ids-only grammar-constrained output, verbatim block lookup.
@@ -311,62 +303,48 @@ so FMR's tier moves here rather than being copied. The coupling is narrow —
   prompt is `SelectionConfig.preamble` (the full prefix is preamble +
   `# Candidates` + each candidate's summary block, assembled in
   `SelectionTier.assemblePrefix`). RankKit ships the default —
-  `String.selectionDefault`, today's `.librarianDefault` guidance with
-  neutral wording ("return ONLY the items needed — fewest that suffice, in
-  call order when order matters; do not invent ids; return an empty list if
-  nothing fits"). Consumers override via the existing `preamble:` parameter:
-  FMR passes its API-librarian text (keeping today's model-visible prompt
-  byte-identical), CCK passes a code-flavored one ("you select source-code
-  chunks that answer the question…", phase 4).
+  `String.selectionDefault`, the proven librarian guidance with neutral
+  wording ("return ONLY the items needed — fewest that suffice, in call
+  order when order matters; do not invent ids; return an empty list if
+  nothing fits"). Consumers pass their own domain-flavored guidance via the
+  `preamble:` parameter, keeping their model-visible prompts under their
+  own control.
 - Conform Apple's `LanguageModelSession` to `AgentSession` (retroactive
   conformance in RankKit) so any FoundationModels model — `.fast`,
   `.default`, adapter-loaded — plugs into the selection seam without Router
   (§3a: the model is never hardcoded).
-- Build the `Searcher` facade (§3a) and the `Examples/FullMonty` targets in
-  this phase — they compose the phase-2 ranker with this tier and are the
-  package's front door and living documentation.
-- Port FMR's `SelectionTests`/`OverBudgetTests` alongside; FMR keeps thin
-  integration coverage over its `MetadataSearcher` wiring. `Searcher` gets
-  its own suite against scripted `AgentSession` fakes and a fake embedder.
+- Build the `Searcher` facade (§3a) and the `Examples/FullMonty` targets —
+  they compose the phase-2 ranker with this tier and are the package's
+  front door and living documentation.
+- Port the source repo's `SelectionTests`/`OverBudgetTests` alongside.
+  `Searcher` gets its own suite against scripted `AgentSession` fakes and a
+  fake embedder.
 
-**Phase 4 — CodeContextKit adopts agent selection in `search code`**
+## 6a. Follow-on work — separate jobs, out of scope here
 
-- Add a search mode to `SearchCode` mirroring FMR's `SearchMode`:
-  `.retrieval` (today's behavior, unchanged, stays the default), `.selection`
-  (agent picks), `.auto` (selection when a session factory is configured,
-  else retrieval) — and thread it through `CodeContext`'s `search code` op.
-- A code corpus (10³–10⁵ chunks) will essentially always be over
-  `capacityCharacterLimit`, so CCK lives on the over-budget path: RRF ranks
-  the corpus exactly as today, the top `candidateLimit` chunks' summary
-  blocks seed a one-off session, the model returns the fewest chunk ids that
-  answer the intent, and results keep their real fused `score`/`signals`.
-  Selection is a *reranking/pruning stage over* RRF, not a replacement — RRF
-  remains the candidate source.
-- Wiring: `CodeContext` accepts an optional `SelectionConfig` (session
-  factory from FoundationModelsRouter, same shape FMR uses); absent one,
-  `.selection` fails loudly and `.auto` degrades to `.retrieval`, matching
-  FMR's `SelectionTierUnavailable` semantics.
-- Tests: scripted `AgentSession` fakes (FMR's pattern) over small fixture
-  corpora — no GPU, no live model — plus one gated live-Router integration
-  test mirroring FMR's `METADATA_REGISTRY_INTEGRATION_TESTS` convention.
+Each of these gets planned and executed **in its own repo**, against RankKit
+`main`; this plan deliberately does not spec them:
 
-## 7. Risks
+- **CodeContextKit**: migrate onto RankKit (drop its primitive copies, adopt
+  the shared types), and later add an agent-selection mode to `search code`
+  over its RRF candidates.
+- **FoundationModelsMetadataRegistry**: migrate onto RankKit (drop its
+  ported copies, adopt the shared tier, keep its librarian preamble and
+  `MetadataDiagnostic` surface).
+- After those migrations: each repo verifies its own downstream dependents.
 
-- **Module-move source breaks downstream** of CCK/FMR (types change modules).
-  Mitigated by `@_exported import` in phase-1 steps 4–5; verify by building
-  each repo's dependents (sah MCP, Multitool) before merging.
-- **Remote `branch: "main"` dependency** means a RankKit regression breaks
-  both consumers' CI at once. Same tradeoff the family already accepts for
-  FoundationModelsRouter; the ported test suite is the guard.
-- **CCK's Router-label drift** (`embed(texts:)`): if CCK currently pins an
-  older Router, adopting RankKit's adapter may surface other Router API
-  drift in CCK — handle in step 5, don't paper over it in RankKit.
-- **Selection adds latency and a model dependency to `search code`** (a
-  session per query, tokens per candidate summary). Mitigated by keeping
-  `.retrieval` the default and `.auto` degrading loudly when no session
-  factory is configured — the same never-silent posture FMR ships.
-- **Candidate-summary budget for code**: chunk summaries must stay terse
-  (symbol path + kind + location, not chunk text) or the over-budget one-off
-  prefix itself blows the context window at `candidateLimit` ≈ 24. Phase 4
-  should measure the assembled prefix size on a real corpus before picking
-  defaults.
+## 7. Risks (this repo)
+
+- **Remote `branch: "main"` dependency**: once consumers adopt RankKit, a
+  regression here breaks their CI. Same tradeoff the family already accepts
+  for FoundationModelsRouter; the ported test suite is the guard — keep
+  `main` green.
+- **FoundationModels API assumptions**: the `.fast`/`.default` model
+  spellings and the feasibility of a retroactive `LanguageModelSession`
+  conformance must be verified against the macOS 27 SDK in phase 3 — fall
+  back to a thin wrapper type if the retroactive conformance fights the
+  class's actual API surface.
+- **`fork()` semantics for plain `LanguageModelSession`s**: the tier's
+  under-budget path assumes fork-per-call; a session type without native
+  fork needs either a factory-recreated fresh session or documented
+  transcript-accumulation behavior — decide and test in phase 3.

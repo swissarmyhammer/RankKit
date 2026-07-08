@@ -1,7 +1,6 @@
 ---
 depends_on:
 - 01KWYG1850D1654Z6WSQXTHA1B
-- 01KWYG02NSB135TJPQ0EA8BXXT
 position_column: todo
 position_ordinal: 8a80
 title: Refactor CCK SearchCode onto HybridRanker

@@ -1,7 +1,5 @@
 ---
-depends_on:
-- 01KWYG4WT9DFYNXHC1C7P9K0SZ
-- 01KWYG1WTKS4M6H8QXZ0FJ453A
+depends_on: []
 position_column: todo
 position_ordinal: '9280'
 title: 'CCK: agent-selection mode in search code'

@@ -12,7 +12,7 @@ Copy `../FoundationModelsMetadataRegistry/Sources/FoundationModelsMetadataRegist
 
 Rewrite the constants' doc comments neutrally ("primary field" / "body field" — no ids, blocks, symbol paths). Strip the port-attribution header like the other files. `BM25Corpus` and `score(...)` stay byte-identical.
 
-After this and the other two port tasks are green, push RankKit `main` to GitHub — the consumer migration tasks resolve the remote dep from there (plan.md §6 phase 1 step 3).
+After this and the other two port tasks are green, push RankKit `main` to GitHub so consumers can resolve the remote dependency when they migrate (their migration is planned separately, in their own repos).
 
 ## Acceptance Criteria
 - [ ] `BM25.primaryFieldWeight == 5.0`, `BM25.bodyFieldWeight == 1.0`

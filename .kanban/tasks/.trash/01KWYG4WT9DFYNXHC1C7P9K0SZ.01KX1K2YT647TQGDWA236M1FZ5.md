@@ -1,7 +1,6 @@
 ---
 depends_on:
 - 01KWYG2WCHH0FZJM34C4CB4K02
-- 01KWYG02NSB135TJPQ0EA8BXXT
 position_column: todo
 position_ordinal: '9180'
 title: 'CCK: SelectionCatalog view over SearchCorpusSnapshot'
