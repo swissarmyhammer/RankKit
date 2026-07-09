@@ -129,7 +129,10 @@ RankKit/
   already depend on Router, so keeping the core dependency-free buys nothing.
 - **macOS 27 floor**, inherited from Router; both consumers are already on
   27, so nothing is lost.
-- Strip the "Ported from CodeContextKit's …" headers on the moved files and
+- **Port means copy.** The sibling repos are read-only reference material for
+  this entire plan — nothing in `../CodeContextKit` or
+  `../FoundationModelsMetadataRegistry` is modified, deleted, or touched.
+- Strip the "Ported from CodeContextKit's …" headers on the ported copies and
   replace with a single attribution note (RankKit is now the canonical home;
   lineage: Rust `swissarmyhammer-search` → CodeContextKit → here). Keep all
   doc comments otherwise, minus repo-specific references.
@@ -231,15 +234,16 @@ the example targets, never the library.
 3. **`RoutedEmbedderAdapter`** — take FMR's copy verbatim (it calls Router's
    current `embed(_:)`; CCK's copy carries a stale label and is not the
    canonical source).
-4. **Access control** — everything moved stays `public` exactly as it is
+4. **Access control** — everything ported stays `public` exactly as it is
    today, so consumers can re-export (`@_exported import RankKit` or local
    typealiases) during their own migrations without breaking their public
    APIs. How each does that is their migration's call, not this plan's.
 
-## 5. Tests that move
+## 5. Tests that get ported
 
-Port verbatim (rename suites, drop repo-specific fixtures only where they
-reference chunks/catalogs by name):
+Copy verbatim (rename suites, drop repo-specific fixtures only where they
+reference chunks/catalogs by name) — the source test files stay where they
+are:
 
 - CCK `Tests/CodeContextKitTests/RankerTests.swift` (335 ln — BM25, trigram,
   RRF, tokenizer coverage) and the primitive-level parts of
@@ -248,16 +252,16 @@ reference chunks/catalogs by name):
   primitives; overlapping cases are fine (keep both; they encode each repo's
   edge-case history).
 
-The consumers keep their pipeline-level tests (`SearchCodeTests`,
-`RetrievalSearchTests`, `OverBudgetTests`, …) — those run against the moved
-primitives transitively and are the no-behavior-change proof during
-migration.
+The consumers keep all their own tests untouched — their pipeline-level
+suites (`SearchCodeTests`, `RetrievalSearchTests`, `OverBudgetTests`, …)
+become the no-behavior-change proof whenever they run their own migrations
+(§6a).
 
 ## 6. Phases (all within this repo)
 
 **Phase 1 — extract the identical files**
 1. Scaffold `Package.swift`, `README.md` stub, family CI workflow.
-2. Move the six core files + adapter per §3/§4; port tests per §5.
+2. Port (copy) the six core files + adapter per §3/§4; port tests per §5.
 3. `swift test` green; push `main` to `github.com/swissarmyhammer/RankKit`
    so consumers can resolve the dependency whenever they migrate.
 
@@ -288,7 +292,7 @@ per-id item/block lookup, and summary rendering — so the generalization is:
   `ids: [String]`, `summaryBlock(forId:) -> String?` (seeds the prefix),
   `block(forId:) -> String?` (the verbatim result payload). Any index or
   snapshot type can conform trivially.
-- Move `SelectionTier`, `SelectionConfig` (session factory, preamble,
+- Port (copy) `SelectionTier`, `SelectionConfig` (session factory, preamble,
   `capacityCharacterLimit`, `candidateLimit`), `Selection` (`@Generable` —
   brings the FoundationModels system framework import, fine at the macOS 27
   floor), `AgentSession`, and `idEnumGrammar(ids:)` (already uses Router's
