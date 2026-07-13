@@ -16,8 +16,8 @@ comments:
   timestamp: 2026-07-13T14:10:44.124828+00:00
 depends_on:
 - 01KWYFYV2BQ968Y1RHQXRSP6NQ
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8280'
 title: Port BM25 with neutral field-weight names
 ---
 ## What
