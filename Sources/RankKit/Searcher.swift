@@ -27,9 +27,11 @@
 import FoundationModels
 
 /// The package's front door (plan.md §3a): "a list of things to search, then
-/// a query" is the whole API. Composes `HybridRanker` (BM25 + trigram +
-/// optional cosine, fused by RRF) with `SelectionTier` (agent final
-/// selection) over an in-memory catalog built once from `items` at `init`.
+/// a query" is the whole API.
+///
+/// Composes `HybridRanker` (BM25 + trigram + optional cosine, fused by RRF)
+/// with `SelectionTier` (agent final selection) over an in-memory catalog
+/// built once from `items` at `init`.
 ///
 /// Every knob but `items` is optional: `embedder:` adds the cosine signal
 /// (every item's `text` is embedded once, here, at `init`); `session:`
@@ -61,8 +63,9 @@ public struct Searcher: Sendable {
         /// ranking only -- no session, no tokens.
         case retrieval
 
-        /// The agent selects among candidates (`SelectionTier`). Throws
-        /// `SelectionTierUnavailable` when no session is configured
+        /// The agent selects among candidates (`SelectionTier`).
+        ///
+        /// Throws `SelectionTierUnavailable` when no session is configured
         /// (`session: nil`).
         case selection
 
@@ -72,8 +75,9 @@ public struct Searcher: Sendable {
     }
 
     /// This facade's zero-config default session factory: the on-device
-    /// system model. See this file's header for why `.default`, not
-    /// `.fast`.
+    /// system model.
+    ///
+    /// See this file's header for why `.default`, not `.fast`.
     ///
     /// `public`, not `private`: a default argument value on a `public`
     /// initializer must be at least as visible as the initializer itself.
@@ -212,8 +216,9 @@ public struct Searcher: Sendable {
 /// Thrown by `Searcher.search(_:limit:)` when `mode == .selection` and no
 /// session is configured (`Searcher.init(..., session: nil, ...)`) --
 /// requesting `.selection` explicitly without one fails loudly rather than
-/// silently substituting retrieval. Mirrors FoundationModelsMetadataRegistry's
-/// own `SelectionTierUnavailable`
+/// silently substituting retrieval.
+///
+/// Mirrors FoundationModelsMetadataRegistry's own `SelectionTierUnavailable`
 /// (`Sources/FoundationModelsMetadataRegistry/MetadataSearcher.swift`).
 public struct SelectionTierUnavailable: Error, Sendable, Equatable {
     /// Creates an error indicating that no selection session is configured.
@@ -294,9 +299,7 @@ private struct RetrievalEngine: Sendable {
         let hits = HybridRanker.topMatches(
             ids: catalog.ids, documents: documents, query: query, cosineScores: scores, weights: weights, limit: limit
         )
-        return hits.map { hit in
-            SelectionMatch(id: hit.id, block: catalog.block(forId: hit.id) ?? "", score: hit.score, signals: hit.signals)
-        }
+        return matches(forHits: hits)
     }
 
     /// The selection tier's over-budget candidate source
@@ -313,7 +316,18 @@ private struct RetrievalEngine: Sendable {
         let hits = HybridRanker.fullOrdering(
             ids: catalog.ids, documents: documents, query: query, cosineScores: scores, weights: weights
         )
-        return hits.map { hit in
+        return matches(forHits: hits)
+    }
+
+    /// Maps `hits` back through `catalog` to verbatim `SelectionMatch`es --
+    /// the shared tail of `topMatches` and `fullOrdering`, which otherwise
+    /// duplicate this identical `HybridRanker.Hit` -> `SelectionMatch`
+    /// translation.
+    ///
+    /// - Parameter hits: the ranker's hits, in whatever order they arrived.
+    /// - Returns: one `SelectionMatch` per hit, positionally aligned.
+    private func matches(forHits hits: [Hit]) -> [SelectionMatch] {
+        hits.map { hit in
             SelectionMatch(id: hit.id, block: catalog.block(forId: hit.id) ?? "", score: hit.score, signals: hit.signals)
         }
     }
