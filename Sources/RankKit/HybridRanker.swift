@@ -99,11 +99,14 @@ public enum HybridRanker {
         validateInputs(ids: ids, documents: documents, cosineScores: cosineScores)
         guard limit > 0, !documents.isEmpty else { return [] }
 
-        let signals = computeSignals(documents: documents, query: query, cosineScores: cosineScores)
-        let normalized = fuseAndNormalize(signals: signals, weights: weights)
-        let orderedIndices = sortByNormalizedScore(Array(normalized.keys), using: normalized)
+        let (signals, normalized, sortedIndices) = computeAndSortSignals(
+            documents: documents,
+            query: query,
+            cosineScores: cosineScores,
+            weights: weights
+        )
 
-        return buildHits(documentIndices: Array(orderedIndices.prefix(limit)), ids: ids, normalized: normalized, signals: signals)
+        return buildHits(documentIndices: Array(sortedIndices.prefix(limit)), ids: ids, normalized: normalized, signals: signals)
     }
 
     /// Fuses `documents` against `query`, returning exactly `documents.count`
@@ -141,10 +144,12 @@ public enum HybridRanker {
         validateInputs(ids: ids, documents: documents, cosineScores: cosineScores)
         guard !documents.isEmpty else { return [] }
 
-        let signals = computeSignals(documents: documents, query: query, cosineScores: cosineScores)
-        let normalized = fuseAndNormalize(signals: signals, weights: weights)
-
-        let rankedIndices = sortByNormalizedScore(Array(normalized.keys), using: normalized)
+        let (signals, normalized, rankedIndices) = computeAndSortSignals(
+            documents: documents,
+            query: query,
+            cosineScores: cosineScores,
+            weights: weights
+        )
         let unrankedIndices = documents.indices.filter { normalized[$0] == nil }
 
         return buildHits(documentIndices: rankedIndices + unrankedIndices, ids: ids, normalized: normalized, signals: signals)
@@ -169,6 +174,38 @@ public enum HybridRanker {
             cosineScores == nil || cosineScores?.count == documents.count,
             "HybridRanker: cosineScores must be the same length as documents"
         )
+    }
+
+    // MARK: - Shared computation
+
+    /// Computes the per-signal `RetrievalSignals`, fuses and normalizes them,
+    /// and sorts the resulting document indices — the shared computation
+    /// both `topMatches(ids:documents:query:cosineScores:weights:limit:)`
+    /// and `fullOrdering(ids:documents:query:cosineScores:weights:)` perform
+    /// identically before diverging on how they assemble their result.
+    ///
+    /// - Parameters:
+    ///   - documents: the precomputed per-document statistics to score.
+    ///   - query: the search query, tokenized and trigrammed once per call
+    ///     for the BM25 and trigram signals.
+    ///   - cosineScores: one raw cosine-similarity score per document,
+    ///     positionally aligned with `documents`, or `nil` to skip the
+    ///     cosine signal entirely.
+    ///   - weights: the per-signal fusion weights.
+    /// - Returns: the raw per-signal `signals`, the fused/normalized
+    ///   `[0, 1]` score per document any included signal ranked, and every
+    ///   such document index sorted descending by that score with an
+    ///   ascending-index tie-break.
+    private static func computeAndSortSignals(
+        documents: [RankedDocument],
+        query: String,
+        cosineScores: [Double]?,
+        weights: SignalWeights
+    ) -> (signals: RetrievalSignals, normalized: [Int: Double], sortedIndices: [Int]) {
+        let signals = computeSignals(documents: documents, query: query, cosineScores: cosineScores)
+        let normalized = fuseAndNormalize(signals: signals, weights: weights)
+        let sortedIndices = sortByNormalizedScore(Array(normalized.keys), using: normalized)
+        return (signals, normalized, sortedIndices)
     }
 
     // MARK: - Per-signal computation
