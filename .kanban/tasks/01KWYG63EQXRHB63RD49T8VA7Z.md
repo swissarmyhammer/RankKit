@@ -12,8 +12,8 @@ comments:
 depends_on:
 - 01KWYG3S45GN3CAR9K0NAVJCS9
 - 01KWYG46FWSJ4HGVM1149GG40J
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: 8c80
 title: Write RankKit README with the one-call example
 ---
 ## What
