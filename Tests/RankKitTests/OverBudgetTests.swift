@@ -1,4 +1,5 @@
 import Foundation
+import FoundationModelsRouter
 import Testing
 
 @testable import RankKit
@@ -113,7 +114,7 @@ struct OverBudgetTests {
     func overBudgetCreatesAFreshSessionPerCallWithoutCaching() async throws {
         let factoryCallCount = CallCounter()
         let config = SelectionConfig(
-            model: { _ in
+            model: { _, _ in
                 factoryCallCount.increment()
                 return ScriptedAgentSession([#"{"ids":["alpha"]}"#])
             },
@@ -138,7 +139,7 @@ struct OverBudgetTests {
     func overBudgetSessionIsNeverForked() async throws {
         let session = ScriptedAgentSession([#"{"ids":["alpha"]}"#])
         let config = SelectionConfig(
-            model: { _ in session },
+            model: { _, _ in session },
             capacityCharacterLimit: Self.forcedOverBudgetLimit,
             candidateLimit: 2
         )
@@ -223,7 +224,7 @@ struct OverBudgetTests {
         let recorder = DiagnosticRecorder()
         let factoryCallCount = CallCounter()
         let config = SelectionConfig(
-            model: { _ in
+            model: { _, _ in
                 factoryCallCount.increment()
                 return ScriptedAgentSession([#"{"ids":[]}"#])
             },
@@ -316,7 +317,7 @@ struct OverBudgetTests {
             #"{"ids":["alpha"]}"#,
         ])
         let config = SelectionConfig(
-            model: { _ in
+            model: { _, _ in
                 factoryCallCount.increment()
                 return root
             },
@@ -340,6 +341,59 @@ struct OverBudgetTests {
         #expect(root.forkCount == 2)
     }
 
+    // MARK: - Grammar actually constrains the created session, scoped to
+    // this round's candidates (review finding, 2026-07-13)
+
+    @Test
+    func overBudgetSessionIsConstrainedToOnlyTheTopMCandidatesIdEnumGrammarNotTheWholeCatalog() async throws {
+        let factory = RecordingSessionFactory(responses: [#"{"ids":["alpha"]}"#])
+        let config = SelectionConfig(
+            model: factory.makeSession,
+            capacityCharacterLimit: Self.forcedOverBudgetLimit,
+            candidateLimit: 2
+        )
+        let tier = SelectionTier(
+            catalog: Self.catalog,
+            config: config,
+            onDiagnostic: { _ in },
+            retrievalRanking: Self.rankEntireCatalog
+        )
+
+        _ = try await tier.search(intent: "alpha", limit: 5)
+
+        // `candidateLimit: 2` keeps only "alpha"/"bravo" this round (see
+        // `rankEntireCatalog`'s catalog-order tail) -- the session's grammar
+        // must be scoped to exactly those two, not the whole five-id
+        // catalog, matching the `allowedIds` filtering `matches(forIds:)`
+        // already applies downstream. Compared structurally, not via
+        // `Grammar`'s raw-string `Equatable`: `JSONSerialization.data(
+        // withJSONObject:)` doesn't guarantee stable key order across
+        // separate encodes of an equivalent `idEnumGrammar(ids:)` call, so
+        // two semantically-identical grammars can legitimately differ
+        // byte-for-byte.
+        let receivedGrammar = try #require(factory.receivedGrammars.first)
+        #expect(try Self.enumIds(in: receivedGrammar) == ["alpha", "bravo"])
+    }
+
+    /// Extracts the `properties.ids.items.enum` id set a `.jsonSchema`
+    /// `Grammar` constrains to -- lets a test assert on grammar *content*
+    /// without depending on `JSONSerialization`'s unstable key ordering,
+    /// which makes two separately-encoded but equivalent grammars compare
+    /// unequal under `Grammar`'s raw-string `Equatable`.
+    private static func enumIds(in grammar: Grammar) throws -> Set<String> {
+        guard case .jsonSchema(let source) = grammar else {
+            Issue.record("expected a .jsonSchema grammar")
+            return []
+        }
+        let data = try #require(source.data(using: .utf8))
+        let root = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let properties = try #require(root["properties"] as? [String: Any])
+        let idsSchema = try #require(properties["ids"] as? [String: Any])
+        let itemsSchema = try #require(idsSchema["items"] as? [String: Any])
+        let enumValues = try #require(itemsSchema["enum"] as? [String])
+        return Set(enumValues)
+    }
+
     @Test
     func prefixOneCharacterOverTheCapacityLimitUsesTheOneOffPath() async throws {
         let expectedPrefix = SelectionTier.assemblePrefix(
@@ -349,7 +403,7 @@ struct OverBudgetTests {
         )
         let factoryCallCount = CallCounter()
         let config = SelectionConfig(
-            model: { _ in
+            model: { _, _ in
                 factoryCallCount.increment()
                 return ScriptedAgentSession([#"{"ids":["alpha"]}"#])
             },

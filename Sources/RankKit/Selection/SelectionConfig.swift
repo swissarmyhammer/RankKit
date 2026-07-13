@@ -5,6 +5,22 @@
 // `.librarianDefault` to `.selectionDefault` with neutral wording -- no
 // "API librarian"/"functions" domain language, since RankKit's catalog is
 // never assumed to be an API surface.
+//
+// `model` diverges from the ported source in one respect (review finding,
+// 2026-07-13): the source's `model: (String) -> any AgentSession` left
+// grammar-constraining entirely to the external caller building this
+// closure, with no way for it to vary per call -- fine for a fixed whole-
+// catalog grammar, but wrong for the over-budget path, whose candidate id
+// set (and therefore correct grammar) differs every call. `RoutedSession`
+// itself has no way to apply a grammar outside session creation (`respond`
+// has no grammar parameter; `grammar` is fixed at
+// `RoutedModel.makeGuidedSession(grammar:instructions:workingDirectory:)`
+// and merely inherited by `fork()`), so `model` now takes the current
+// call's `Grammar` alongside its instructions, letting `SelectionTier`
+// supply `Self.idEnumGrammar(ids:)` scoped to whichever id set is actually
+// in play.
+
+import FoundationModelsRouter
 
 /// Configuration for a selection tier: how selection sessions are created,
 /// what guidance seeds the assembled prefix, and the capacity/candidate
@@ -25,14 +41,18 @@ public struct SelectionConfig: Sendable {
     /// seeds its one-off session with.
     public static let defaultCandidateLimit = 24
 
-    /// Creates a session seeded with the given instructions text -- the
-    /// seam a selection tier drives both the cached root session and the
-    /// over-budget one-off session through. `@Sendable` so it can cross a
-    /// selection tier's actor isolation boundary; production wires it to
-    /// `RoutedLLM.makeGuidedSession(_:instructions:)`, already constrained
-    /// to the current id-enum grammar -- the same shape as Multitool's own
-    /// `Librarian`'s `makeSession` parameter.
-    public var model: @Sendable (String) -> any AgentSession
+    /// Creates a session seeded with the given instructions text and
+    /// constrained to the given grammar -- the seam a selection tier drives
+    /// both the cached root session and the over-budget one-off session
+    /// through. `@Sendable` so it can cross a selection tier's actor
+    /// isolation boundary; production wires it to
+    /// `RoutedLLM.makeGuidedSession(grammar:instructions:)`, since a
+    /// `RoutedSession`'s grammar can only be set at creation (never per
+    /// `respond(to:)` call) and `fork()` merely inherits it. `SelectionTier`
+    /// always calls this with `Self.idEnumGrammar(ids:)` over the current
+    /// candidate id set -- the whole catalog under budget, the top-M
+    /// candidates over budget.
+    public var model: @Sendable (String, Grammar) -> any AgentSession
 
     /// The selection guidance prepended to every assembled prefix. Defaults
     /// to `.selectionDefault`.
@@ -51,7 +71,7 @@ public struct SelectionConfig: Sendable {
     ///
     /// - Parameters:
     ///   - model: creates a session seeded with the given instructions
-    ///     text.
+    ///     text and constrained to the given grammar.
     ///   - preamble: the selection guidance prepended to every assembled
     ///     prefix. Defaults to `.selectionDefault`.
     ///   - capacityCharacterLimit: the assembled prefix's character
@@ -59,7 +79,7 @@ public struct SelectionConfig: Sendable {
     ///   - candidateLimit: the over-budget top-M candidate count. Defaults
     ///     to `defaultCandidateLimit`.
     public init(
-        model: @escaping @Sendable (String) -> any AgentSession,
+        model: @escaping @Sendable (String, Grammar) -> any AgentSession,
         preamble: String = .selectionDefault,
         capacityCharacterLimit: Int = SelectionConfig.defaultCapacityCharacterLimit,
         candidateLimit: Int = SelectionConfig.defaultCandidateLimit

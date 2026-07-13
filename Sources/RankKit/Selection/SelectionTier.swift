@@ -116,8 +116,9 @@ public actor SelectionTier {
     ///     yields an empty result without forking or creating a session.
     /// - Returns: the selected ids' verbatim `SelectionMatch`es, at most
     ///   `limit`.
-    /// - Throws: whatever the underlying session's `fork()`/
-    ///   `respond(to:generating:)` throws.
+    /// - Throws: an error from `idEnumGrammar(ids:)` (not expected for
+    ///   `Selection`'s fixed shape), or whatever the underlying session's
+    ///   `fork()`/`respond(to:generating:)` throws.
     public func search(intent: String, limit: Int) async throws -> [SelectionMatch] {
         guard limit > 0 else { return [] }
         guard assembledPrefix.count <= config.capacityCharacterLimit else {
@@ -133,10 +134,15 @@ public actor SelectionTier {
     /// first use.
     ///
     /// - Returns: the cached root session, seeded with the full assembled
-    ///   prefix.
+    ///   prefix and constrained to `idEnumGrammar(ids:)` over the whole
+    ///   catalog -- every id is a legal selection under budget, since the
+    ///   assembled prefix already summarizes the whole catalog.
+    /// - Throws: an error from `idEnumGrammar(ids:)` (not expected for
+    ///   `Selection`'s fixed shape) on first use; nothing on a cached hit.
     private func cachedRootSession() async throws -> any AgentSession {
         if let rootSession { return rootSession }
-        let session = config.model(assembledPrefix)
+        let grammar = try Self.idEnumGrammar(ids: catalog.ids)
+        let session = config.model(assembledPrefix, grammar)
         rootSession = session
         return session
     }
@@ -160,8 +166,9 @@ public actor SelectionTier {
     /// - Returns: the selected candidates' verbatim `SelectionMatch`es,
     ///   carrying the real retrieval `score`/`signals` that ranked them, at
     ///   most `limit`.
-    /// - Throws: whatever the one-off session's `respond(to:generating:)`
-    ///   throws.
+    /// - Throws: an error from `idEnumGrammar(ids:)` (not expected for
+    ///   `Selection`'s fixed shape), or whatever the one-off session's
+    ///   `respond(to:generating:)` throws.
     private func overBudgetSearch(intent: String, limit: Int) async throws -> [SelectionMatch] {
         let ranked = await retrievalRanking(intent)
         let candidates = Array(ranked.prefix(config.candidateLimit))
@@ -173,7 +180,11 @@ public actor SelectionTier {
 
         let candidateIds = candidates.map(\.id)
         let prefix = Self.assemblePrefix(preamble: config.preamble, ids: candidateIds, catalog: catalog)
-        let session = config.model(prefix)
+        // Constrained to *this round's* candidates, not the whole catalog --
+        // a one-off session has no stable prefix to reuse, so its grammar is
+        // recomputed fresh per call, scoped to exactly `candidateIds`.
+        let grammar = try Self.idEnumGrammar(ids: candidateIds)
+        let session = config.model(prefix, grammar)
         let selection = try await session.respond(to: intent, generating: Selection.self)
         return matches(
             forIds: selection.ids,

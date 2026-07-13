@@ -1,4 +1,5 @@
 import Foundation
+import FoundationModelsRouter
 import os
 
 @testable import RankKit
@@ -149,20 +150,25 @@ final class RootSessionRespondCalledDirectlySession: AgentSession, Sendable {
     }
 }
 
-/// Records every `instructions` string a `SelectionConfig.model` factory
-/// closure was called with, returning one freshly-scripted
+/// Records every `instructions` string and `Grammar` a `SelectionConfig
+/// .model` factory closure was called with, returning one freshly-scripted
 /// `ScriptedAgentSession` (canned with `responses`) per call — lets a test
-/// assert both on *how many times* a session was created (proving the root
-/// session is cached, not rebuilt per `search()` call) and on *what prefix
+/// assert on *how many times* a session was created (proving the root
+/// session is cached, not rebuilt per `search()` call), on *what prefix
 /// text* was actually seeded (e.g. that it carries summary blocks, not full
-/// ones).
+/// ones), and on *what grammar* actually constrained it (e.g. that it's
+/// scoped to the current candidate set, not the whole catalog).
 final class RecordingSessionFactory: Sendable {
     /// The canned responses every created session is scripted with.
     private let responses: [String]
 
-    /// Every `instructions` string `makeSession(instructions:)` has been
-    /// called with, in call order.
+    /// Every `instructions` string `makeSession(instructions:grammar:)` has
+    /// been called with, in call order.
     private let receivedInstructionsBox = OSAllocatedUnfairLock<[String]>(initialState: [])
+
+    /// Every `Grammar` `makeSession(instructions:grammar:)` has been called
+    /// with, in call order.
+    private let receivedGrammarsBox = OSAllocatedUnfairLock<[Grammar]>(initialState: [])
 
     /// Creates a factory whose every vended session is scripted with
     /// `responses`.
@@ -177,13 +183,19 @@ final class RecordingSessionFactory: Sendable {
     /// call order.
     var receivedInstructions: [String] { receivedInstructionsBox.withLock { $0 } }
 
+    /// Every `Grammar` this factory has been called with, in call order.
+    var receivedGrammars: [Grammar] { receivedGrammarsBox.withLock { $0 } }
+
     /// Creates and records a new scripted session — `SelectionConfig`'s
     /// `model` factory parameter.
     ///
-    /// - Parameter instructions: the instructions text to record.
+    /// - Parameters:
+    ///   - instructions: the instructions text to record.
+    ///   - grammar: the grammar to record.
     /// - Returns: a freshly-scripted `ScriptedAgentSession`.
-    func makeSession(instructions: String) -> any AgentSession {
+    func makeSession(instructions: String, grammar: Grammar) -> any AgentSession {
         receivedInstructionsBox.withLock { $0.append(instructions) }
+        receivedGrammarsBox.withLock { $0.append(grammar) }
         return ScriptedAgentSession(responses)
     }
 }

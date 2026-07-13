@@ -1,4 +1,5 @@
 import Foundation
+import FoundationModelsRouter
 import Testing
 
 @testable import RankKit
@@ -44,7 +45,7 @@ struct SelectionTests {
             #"{"ids":["rollback"]}"#,
         ])
         let factoryCallCount = CallCounter()
-        let config = SelectionConfig(model: { _ in
+        let config = SelectionConfig(model: { _, _ in
             factoryCallCount.increment()
             return root
         })
@@ -233,7 +234,7 @@ struct SelectionTests {
     @Test
     func nonPositiveLimitReturnsEmptyWithoutCreatingASession() async throws {
         let factoryCallCount = CallCounter()
-        let config = SelectionConfig(model: { _ in
+        let config = SelectionConfig(model: { _, _ in
             factoryCallCount.increment()
             return ScriptedAgentSession([#"{"ids":["deploy"]}"#])
         })
@@ -302,5 +303,48 @@ struct SelectionTests {
         let enumValues = try #require(itemsSchema["enum"] as? [String])
 
         #expect(enumValues.isEmpty)
+    }
+
+    // MARK: - Grammar actually constrains the created session (review finding, 2026-07-13)
+
+    @Test
+    func cachedRootSessionIsConstrainedToTheWholeCatalogsIdEnumGrammar() async throws {
+        let factory = RecordingSessionFactory(responses: [#"{"ids":["deploy"]}"#])
+        let config = SelectionConfig(model: factory.makeSession)
+        let tier = SelectionTier(
+            catalog: Self.catalog,
+            config: config,
+            onDiagnostic: { _ in },
+            retrievalRanking: Self.neverCalledRetrievalRanking
+        )
+
+        _ = try await tier.search(intent: "task", limit: 5)
+
+        // Compared structurally, not via `Grammar`'s raw-string `Equatable`:
+        // `JSONSerialization.data(withJSONObject:)` doesn't guarantee stable
+        // key order across separate encodes of an equivalent
+        // `idEnumGrammar(ids:)` call, so two semantically-identical grammars
+        // can legitimately differ byte-for-byte.
+        let receivedGrammar = try #require(factory.receivedGrammars.first)
+        #expect(try Self.enumIds(in: receivedGrammar) == Set(Self.catalog.ids))
+    }
+
+    /// Extracts the `properties.ids.items.enum` id set a `.jsonSchema`
+    /// `Grammar` constrains to -- lets a test assert on grammar *content*
+    /// without depending on `JSONSerialization`'s unstable key ordering,
+    /// which makes two separately-encoded but equivalent grammars compare
+    /// unequal under `Grammar`'s raw-string `Equatable`.
+    private static func enumIds(in grammar: Grammar) throws -> Set<String> {
+        guard case .jsonSchema(let source) = grammar else {
+            Issue.record("expected a .jsonSchema grammar")
+            return []
+        }
+        let data = try #require(source.data(using: .utf8))
+        let root = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let properties = try #require(root["properties"] as? [String: Any])
+        let idsSchema = try #require(properties["ids"] as? [String: Any])
+        let itemsSchema = try #require(idsSchema["items"] as? [String: Any])
+        let enumValues = try #require(itemsSchema["enum"] as? [String])
+        return Set(enumValues)
     }
 }
