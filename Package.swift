@@ -20,12 +20,61 @@ let packageName = "RankKit"
 /// resolve there (plan.md §3).
 let routerDependencyName = "FoundationModelsRouter"
 
+/// The `mlx-swift-lm` fork's package name.
+///
+/// The same remote dependency FoundationModelsRouter itself declares;
+/// re-declared here with the identical URL/branch so SwiftPM's dependency
+/// resolution unifies the two into a single resolved checkout, never a
+/// duplicate, so `FullMontyCore` can import `MLXHuggingFace`'s
+/// `#hubDownloader()` / `#huggingFaceTokenizerLoader()` macros to build a
+/// live `Router` for its gated real-model path (plan.md §3a) — the only
+/// place this package touches MLX directly.
+let mlxPackage = "mlx-swift-lm"
+
+/// The Hugging Face Hub client package name.
+///
+/// `FullMontyCore` links this to supply `LiveModelLoader`'s `Downloader`,
+/// mirroring FoundationModelsRouter's own gated integration suite and
+/// FoundationModelsMetadataRegistry's `Examples/SemanticSearch` demo. Needed
+/// only by `FullMontyCore`'s live-Router path; the library target never
+/// imports it.
+let huggingFacePackage = "swift-huggingface"
+
+/// The Hugging Face Transformers package name.
+///
+/// Its `Tokenizers` product supplies `LiveModelLoader`'s `TokenizerLoader`
+/// alongside `huggingFacePackage`'s `Downloader`. Needed only by
+/// `FullMontyCore`'s live-Router path; the library target never imports it.
+let transformersPackage = "swift-transformers"
+
+/// The Router/MLX/Hugging Face product quintet that resolves a real
+/// `Router` + `LiveModelLoader`: FoundationModelsRouter itself, MLX's
+/// Hugging Face hub + LM-common products, and the Hugging Face
+/// hub/transformers products.
+///
+/// Mirrors FoundationModelsMetadataRegistry's own
+/// `liveRouterProductDependencies` (plan.md §3a "example-only MLX/Hugging
+/// Face product dependencies attach to the example targets, never the
+/// library"). Attaches only to `FullMontyCore`; the library target's own
+/// `FoundationModelsRouter` dependency below stays exactly as it was.
+let liveRouterProductDependencies: [Target.Dependency] = [
+    .product(name: routerDependencyName, package: routerDependencyName),
+    .product(name: "MLXHuggingFace", package: mlxPackage),
+    .product(name: "MLXLMCommon", package: mlxPackage),
+    .product(name: "HuggingFace", package: huggingFacePackage),
+    .product(name: "Tokenizers", package: transformersPackage),
+]
+
 /// The SwiftPM manifest for RankKit (plan.md §3).
 ///
-/// Phase 1 scaffold: a single library target depending on
-/// FoundationModelsRouter, and a Swift Testing unit test target. The ported
-/// retrieval primitives, the selection tier, and the `Examples/` targets
-/// land in later phases (plan.md §6).
+/// A single library target depending on FoundationModelsRouter, a Swift
+/// Testing unit test target, and the `Examples/FullMonty` /
+/// `Examples/FullMontyCore` targets (plan.md §3a): the package's runnable
+/// living proof of the `Searcher` facade — demo only, never a dependency of
+/// the library. `FullMonty`'s entry logic lives in `FullMontyCore` (a plain
+/// library target, not the executable itself) so the test target can
+/// `@testable import` and invoke it directly as a plain library dependency,
+/// mirroring FoundationModelsMetadataRegistry's `*Core` example targets.
 let package = Package(
     name: packageName,
     // Commit to macOS 27 / FoundationModels v2; floor inherited from
@@ -40,7 +89,19 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/swissarmyhammer/\(routerDependencyName)", branch: "main")
+        .package(url: "https://github.com/swissarmyhammer/\(routerDependencyName)", branch: "main"),
+        .package(url: "https://github.com/swissarmyhammer/\(mlxPackage)", branch: "foundationmodels-fixes"),
+        .package(url: "https://github.com/huggingface/\(huggingFacePackage)", from: "0.9.0"),
+        .package(url: "https://github.com/huggingface/\(transformersPackage)", from: "1.3.0"),
+        // Pinned below swift-jinja 2.4.0 for the same reason
+        // FoundationModelsMetadataRegistry's `Package.swift` pins it: that
+        // release changed `Value.object` to key on `ObjectKey` instead of
+        // `String`, which the latest tagged swift-transformers never
+        // adopted — `Sources/Hub/Config.swift` fails to compile against
+        // 2.4.0. `transformersPackage` only constrains jinja to `from:
+        // "2.0.0"`, so without this upper bound `swift package update`
+        // silently drifts onto the broken release.
+        .package(url: "https://github.com/huggingface/swift-jinja.git", "2.0.0"..<"2.4.0"),
     ],
     targets: [
         .target(
@@ -53,9 +114,35 @@ let package = Package(
         .testTarget(
             name: "\(packageName)Tests",
             dependencies: [
-                .target(name: packageName)
+                .target(name: packageName),
+                .target(name: "FullMontyCore"),
             ],
             path: "Tests/\(packageName)Tests"
+        ),
+        // `FullMonty`'s entry logic (plan.md §3a): a fixture catalog of ~50
+        // developer-tool items, a handful of queries, printed matches with
+        // per-signal scores and the model's final selection — the living
+        // proof of the `Searcher` facade documented in `Searcher.swift`'s
+        // header. A plain library (not the executable itself) so
+        // `ExamplesSmokeTests` can invoke its GPU-free paths directly.
+        // Depends on the full `liveRouterProductDependencies` quintet for
+        // its gated real-model path (behind `RANKKIT_INTEGRATION_TESTS`);
+        // every other path (the default on-device-system-model path, and
+        // `--no-model`) never touches them.
+        .target(
+            name: "FullMontyCore",
+            dependencies: [.target(name: packageName)] + liveRouterProductDependencies,
+            path: "Examples/FullMontyCore"
+        ),
+        // A thin runnable entry point over `FullMontyCore`. `swift build`
+        // compiles this GPU-free; `swift run FullMonty --no-model` runs the
+        // degraded keyword-only path GPU-free; the default (on-device
+        // system model) and `RANKKIT_INTEGRATION_TESTS`-gated (live Router)
+        // paths need Apple Intelligence / a live Router respectively.
+        .executableTarget(
+            name: "FullMonty",
+            dependencies: [.target(name: "FullMontyCore")],
+            path: "Examples/FullMonty"
         ),
     ]
 )
