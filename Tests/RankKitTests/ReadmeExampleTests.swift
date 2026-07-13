@@ -38,11 +38,7 @@ struct ReadmeExampleTests {
     /// "Modes" section, which documents this exact shape, can't drift.
     @Test("The lead example's SearchItem list and Searcher(items).search(...) call find grep first")
     func leadExampleFindsGrepForATodoCommentsQuery() async throws {
-        let items = [
-            SearchItem(id: "grep", text: "Search file contents with regular expressions"),
-            SearchItem(id: "glob", text: "Find files by name pattern, sorted by mtime"),
-            SearchItem(id: "watch", text: "Watch a directory and stream change events"),
-        ]
+        let items = SearcherTests.toolItems
 
         let searcher = try await Searcher(items, session: { _ in ScriptedAgentSession([#"{"ids":["grep"]}"#]) })
 
