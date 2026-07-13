@@ -13,8 +13,8 @@ comments:
   timestamp: 2026-07-13T14:21:40.187425+00:00
 depends_on:
 - 01KWYFZ70DH9VZR2CRJNFJTDNE
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8380'
 title: Add RankedDocument precompute type
 ---
 ## What\nCreate `Sources/RankKit/RankedDocument.swift` (plan.md §6 phase 2): a value type whose `init(primaryText:bodyText:)` precomputes everything the per-signal scorers need for one document:\n- field-weighted term-frequency map (`primaryFieldWeight` × primary tokens + `bodyFieldWeight` × body tokens)\n- term set (`Set(weightedTermFrequency.keys)`)\n- document length (unweighted token count across both fields)\n- canonical trigram sets for primary and body text\n\nThis replaces the duplicated precompute in `../CodeContextKit/Sources/CodeContextKit/Search/SearchCorpus.swift` (`preprocessRow`) and FMR's `MetadataIndex` build — use those two implementations as the behavioral reference.\n\n## Acceptance Criteria\n- [x] For identical inputs, `RankedDocument` produces the same weighted term frequencies, term sets, document lengths, and trigram sets as CCK's `preprocessRow` (assert against hand-computed fixtures derived from that code)\n- [x] Type is `Sendable`, pure, and has no storage/corpus dependencies\n\n## Tests\n- [x] `Tests/RankKitTests/RankedDocumentTests.swift`: fixture texts with known token/trigram outcomes; cases for empty primary, empty body, overlapping terms (weight summation), unicode text\n- [x] Run `swift test` — exits 0\n\n## Workflow\n- Use `/tdd` — write failing tests first, then implement to make them pass.
