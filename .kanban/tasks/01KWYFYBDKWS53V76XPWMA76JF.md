@@ -16,7 +16,7 @@ comments:
 
     All acceptance criteria met. Leaving in `doing` for `/review`.
   timestamp: 2026-07-13T13:36:39.189955+00:00
-position_column: doing
+position_column: done
 position_ordinal: '80'
 title: Scaffold RankKit Swift package
 ---
