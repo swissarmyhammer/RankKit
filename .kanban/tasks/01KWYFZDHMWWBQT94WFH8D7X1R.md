@@ -22,8 +22,8 @@ comments:
   timestamp: 2026-07-13T14:37:40.544823+00:00
 depends_on:
 - 01KWYFYBDKWS53V76XPWMA76JF
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8480'
 title: 'Port embedding seam: TextEmbedding + RoutedEmbedderAdapter'
 ---
 ## What
