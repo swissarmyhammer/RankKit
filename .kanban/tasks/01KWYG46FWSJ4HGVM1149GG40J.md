@@ -56,8 +56,8 @@ comments:
   timestamp: 2026-07-13T19:35:26.844735+00:00
 depends_on:
 - 01KWYG3S45GN3CAR9K0NAVJCS9
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: 8b80
 title: 'FullMonty example: runnable end-to-end demo'
 ---
 ## What
