@@ -308,6 +308,24 @@ struct SearcherTests {
         #expect(factoryCallCount.count == 0)
     }
 
+    @Test
+    func nonPositiveLimitReturnsEmptyInAutoModeWithoutCreatingASession() async throws {
+        let factoryCallCount = CallCounter()
+        let searcher = try await Searcher(
+            Self.toolItems,
+            session: { _ in
+                factoryCallCount.increment()
+                return ScriptedAgentSession([#"{"ids":["grep"]}"#])
+            },
+            mode: .auto
+        )
+
+        let matches = try await searcher.search("anything", limit: 0)
+
+        #expect(matches.isEmpty)
+        #expect(factoryCallCount.count == 0)
+    }
+
     // MARK: - Duplicate ids: first occurrence wins, never a crash
 
     @Test

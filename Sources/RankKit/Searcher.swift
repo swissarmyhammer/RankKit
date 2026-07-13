@@ -294,9 +294,8 @@ private struct RetrievalEngine: Sendable {
         let hits = HybridRanker.topMatches(
             ids: catalog.ids, documents: documents, query: query, cosineScores: scores, weights: weights, limit: limit
         )
-        return hits.compactMap { hit in
-            guard let block = catalog.block(forId: hit.id) else { return nil }
-            return SelectionMatch(id: hit.id, block: block, score: hit.score, signals: hit.signals)
+        return hits.map { hit in
+            SelectionMatch(id: hit.id, block: catalog.block(forId: hit.id) ?? "", score: hit.score, signals: hit.signals)
         }
     }
 

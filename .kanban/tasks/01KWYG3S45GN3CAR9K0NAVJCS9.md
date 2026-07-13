@@ -20,6 +20,19 @@ comments:
 
     **Verification:** `swift build` and `swift test` both green — 181/181 tests across 15 suites (163 pre-existing + 18 new), zero warnings, zero failures. TDD followed throughout: watched SearcherTests.swift fail to compile first (`cannot find 'Searcher'/'SearchItem' in scope`), then implemented to green.
   timestamp: 2026-07-13T18:10:11.247751+00:00
+- actor: claude-code
+  id: 01kxebr4pea2m087hd8cna67tb
+  text: |-
+    Fixed both review findings.
+
+    1. `Sources/RankKit/Searcher.swift` `RetrievalEngine.topMatches`: replaced `hits.compactMap { guard let block = catalog.block(forId: hit.id) else { return nil }; ... }` with `hits.map { SelectionMatch(id: hit.id, block: catalog.block(forId: hit.id) ?? "", score: hit.score, signals: hit.signals) }`, matching the `?? ""` strategy already used by `Searcher.init` and `RetrievalEngine.fullOrdering`. Traced via callgraph that `hit.id` is always drawn from `catalog.ids` (through `HybridRanker.buildHits`), and `ItemCatalog.init` guarantees every id in `ids` also has a `texts` entry, so `catalog.block(forId:)` can never actually be nil for a real `hit.id` here — this was dead-code-path inconsistency, not an observable-behavior change.
+
+    2. `Tests/RankKitTests/SearcherTests.swift`: added `nonPositiveLimitReturnsEmptyInAutoModeWithoutCreatingASession`, mirroring the existing `.retrieval`/`.selection` `limit <= 0` tests — configures a session factory with a `CallCounter`, asserts `search(..., limit: 0)` returns empty and the factory is never invoked (since `.auto` with a configured session dispatches into `SelectionTier.search`, whose `guard limit > 0 else { return [] }` fires before the cached root session is ever touched).
+
+    Verification: `swift build` exit 0, `swift test` 182/182 passing (181 pre-existing + 1 new), `SearcherTests` suite 19/19 green including the new test. Adversarial `double-check` agent reviewed both fixes independently (traced the catalog/id invariant itself, confirmed the compiler shapes, ran `swift test --filter SearcherTests`) and returned PASS.
+
+    Both review-finding checklist items flipped to `[x]`. Leaving task in `doing` for `/review` per implement skill workflow.
+  timestamp: 2026-07-13T18:27:37.294976+00:00
 depends_on:
 - 01KWYG1850D1654Z6WSQXTHA1B
 - 01KWYG2WCHH0FZJM34C4CB4K02
@@ -29,24 +42,4 @@ position_column: doing
 position_ordinal: '80'
 title: Build Searcher one-call facade
 ---
-## What
-Create `Sources/RankKit/Searcher.swift` + `Sources/RankKit/SearchItem.swift` per plan.md §3a — the package's front door where "a list of things to search, then a query" is the whole API:
-- `SearchItem`: `id` + `text` (+ optional `summary`, defaults to `text`, seeds the selection prefix). A `Searchable` protocol lets richer types participate without wrapping.
-- `Searcher(items)`: full monty with zero config — BM25 + trigram retrieval fused by RRF, agent final selection on the on-device system model `.fast` (the shipped default — guidance, not a requirement).
-- All knobs optional: `embedder:` (any `TextEmbedding` — adds the cosine signal; items embedded once at init), `session:` (`(String) -> any AgentSession` — any `LanguageModelSession` model or `RoutedAgentSession`; never hardcoded), `weights:`, `preamble:` (default `.selectionDefault`), `candidateLimit:`, `mode:` (`.retrieval`/`.selection`/`.auto`, default `.auto`).
-- `search(_ query: String, limit: Int = 20)` → results with `id`, `block`, `score`, per-signal `signals`.
-- Internally thin: composes `HybridRanker` (retrieval) + `SelectionTier` (selection) over an in-memory `SelectionCatalog` built from the items.
-- Graceful degradation, never silent: no embedder → keyword-only + diagnostic; `mode: .selection` with no session available → loud error (mirror FMR's `SelectionTierUnavailable`); `.auto` degrades to retrieval.
-
-## Acceptance Criteria
-- [ ] `try await Searcher(items)` then `try await searcher.search("…")` works with a scripted fake standing in for the system model in tests
-- [ ] Swapping `session:` swaps the model — no code path names a specific model outside the default
-- [ ] A custom type conforming to `Searchable` (not wrapped in `SearchItem`) works end-to-end through `Searcher` and `search(...)`
-- [ ] Degradation cases reported via the `RankDiagnostic`/diagnostic callback, never silently
-
-## Tests
-- [ ] `Tests/RankKitTests/SearcherTests.swift`: end-to-end over a fixture item list with `FakeEmbedder` + scripted `AgentSession` — retrieval-only mode, selection mode (under- and over-budget), `.auto` resolution both ways, degradation diagnostics, and a `Searchable`-conformer case
-- [ ] Run `swift test` — exits 0 (no GPU, no live model)
-
-## Workflow
-- Use `/tdd` — write failing tests first, then implement to make them pass.
+## What\nCreate `Sources/RankKit/Searcher.swift` + `Sources/RankKit/SearchItem.swift` per plan.md §3a — the package's front door where \"a list of things to search, then a query\" is the whole API:\n- `SearchItem`: `id` + `text` (+ optional `summary`, defaults to `text`, seeds the selection prefix). A `Searchable` protocol lets richer types participate without wrapping.\n- `Searcher(items)`: full monty with zero config — BM25 + trigram retrieval fused by RRF, agent final selection on the on-device system model `.fast` (the shipped default — guidance, not a requirement).\n- All knobs optional: `embedder:` (any `TextEmbedding` — adds the cosine signal; items embedded once at init), `session:` (`(String) -> any AgentSession` — any `LanguageModelSession` model or `RoutedAgentSession`; never hardcoded), `weights:`, `preamble:` (default `.selectionDefault`), `candidateLimit:`, `mode:` (`.retrieval`/`.selection`/`.auto`, default `.auto`).\n- `search(_ query: String, limit: Int = 20)` → results with `id`, `block`, `score`, per-signal `signals`.\n- Internally thin: composes `HybridRanker` (retrieval) + `SelectionTier` (selection) over an in-memory `SelectionCatalog` built from the items.\n- Graceful degradation, never silent: no embedder → keyword-only + diagnostic; `mode: .selection` with no session available → loud error (mirror FMR's `SelectionTierUnavailable`); `.auto` degrades to retrieval.\n\n## Acceptance Criteria\n- [ ] `try await Searcher(items)` then `try await searcher.search(\"…\")` works with a scripted fake standing in for the system model in tests\n- [ ] Swapping `session:` swaps the model — no code path names a specific model outside the default\n- [ ] A custom type conforming to `Searchable` (not wrapped in `SearchItem`) works end-to-end through `Searcher` and `search(...)`\n- [ ] Degradation cases reported via the `RankDiagnostic`/diagnostic callback, never silently\n\n## Tests\n- [ ] `Tests/RankKitTests/SearcherTests.swift`: end-to-end over a fixture item list with `FakeEmbedder` + scripted `AgentSession` — retrieval-only mode, selection mode (under- and over-budget), `.auto` resolution both ways, degradation diagnostics, and a `Searchable`-conformer case\n- [ ] Run `swift test` — exits 0 (no GPU, no live model)\n\n## Workflow\n- Use `/tdd` — write failing tests first, then implement to make them pass.\n\n## Review Findings (2026-07-13 13:13)\n\nScope: HEAD~1..HEAD (commit 9e05dd3)\n\n- [x] `Sources/RankKit/Searcher.swift:170` — Nil handling for `catalog.block` lookups is inconsistent across three sites: Searcher.init uses `?? \"\"` when building RankedDocuments, RetrievalEngine.topMatches filters them out with `guard`/`compactMap`, and RetrievalEngine.fullOrdering uses `?? \"\"`. The same catalog lookup should handle missing blocks uniformly. Make all three sites use the same strategy—either all use `?? \"\"` to include missing blocks with defaults, or all filter them out with `guard`. Since init and fullOrdering already use `??`, update topMatches to use `map` with `??` instead of `compactMap` with `guard` for consistency.\n- [x] `Tests/RankKitTests/SearcherTests.swift:251` — The `limit <= 0` short-circuit invariant is tested for `.retrieval` and `.selection` modes, but `.auto` mode (which also dispatches the limit parameter) lacks explicit coverage — all three modes should handle non-positive limits identically, returning empty results. Add a test verifying that `.auto` mode returns empty when `limit <= 0`, similar to the existing tests for the other two modes.\n\nNote: the engine also flagged `Tests/RankKitTests/SearcherTests.swift:144` (add a comment documenting the `NSLock`/`recorded` synchronization invariant on the existing `DiagnosticBox` helper). Dropped per the review skill's blanket test-refactoring exception — the subject is changing already-existing test code, not adding a new test.
