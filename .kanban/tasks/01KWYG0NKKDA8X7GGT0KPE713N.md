@@ -10,8 +10,8 @@ comments:
   timestamp: 2026-07-13T14:50:24.301091+00:00
 depends_on:
 - 01KWYFYBDKWS53V76XPWMA76JF
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8580'
 title: Add CosineScoring utility (vDSP matrix + scalar)
 ---
 ## What\nCreate `Sources/RankKit/CosineScoring.swift` (plan.md §6 phase 2) carrying both existing cosine strategies side by side:\n- `matvecScores(matrix:rowCount:dimension:queryVector:)` — the contiguous row-major `vDSP_mmul` matrix–vector product, ported from `../CodeContextKit/Sources/CodeContextKit/Search/SearchCorpus.swift` (`matvecCosineScores` + `multiplyMatrixByVector`), including the zero-fill guards. Requires L2-normalized rows/query (dot product == cosine).\n- `cosineSimilarity(_:_:)` — the scalar per-row form ported from `MetadataSearcher.cosineSimilarity` in FMR (handles un-normalized vectors, length mismatch → 0.0, zero magnitude → 0.0).\n\n`import Accelerate` is Apple-only — fine at the macOS 27 floor.\n\n## Acceptance Criteria\n- [x] vDSP path matches a scalar dot-product reference on synthetic fixtures (the existing CCK test approach)\n- [x] Scalar path matches FMR's documented edge cases (mismatched lengths → 0.0, zero magnitude → 0.0, range [-1, 1])\n\n## Tests\n- [x] `Tests/RankKitTests/CosineScoringTests.swift`: port the matvec-vs-scalar reference cases from CCK's tests; add scalar edge-case coverage from FMR's behavior\n- [x] Run `swift test` — exits 0\n\n## Workflow\n- Use `/tdd` — write failing tests first, then implement to make them pass.

@@ -1,29 +1,27 @@
 ---
+comments:
+- actor: claude-code
+  id: 01kxe0kxkcy8qehc8p2swmj2yb
+  text: |-
+    Implemented Sources/RankKit/HybridRanker.swift: `SignalWeights` (bm25/trigram/cosine Double, all default 1.0, Sendable+Equatable) and `HybridRanker` — a stateless enum with two entry points sharing one internal pipeline (computeSignals -> fuseAndNormalize -> sortByNormalizedScore -> buildHits):
+    - `topMatches(ids:documents:query:cosineScores:weights:limit:)` — CCK `SearchCode.fuseRankings` style: only documents at least one signal ranked, capped at `limit`.
+    - `fullOrdering(ids:documents:query:cosineScores:weights:)` — FMR `rankEntireCatalog` style: always exactly `documents.count` hits, unranked docs trail in original order scored 0.0.
+
+    Ported verbatim from both source repos: `rankingOfPositiveScores`, the absent-signal rule (`weight > 0.0 && !ranking.isEmpty` gates entry into `RRF.fuse`/`RRF.normalize`), two-field trigram scoring (`BM25.primaryFieldWeight`/`bodyFieldWeight`), and the shared `computeSignals`/`fuseAndNormalize`/`sortByNormalizedScore`/`buildMatches` decomposition from FMR's `MetadataSearcher`. Tie-break on equal normalized score is ascending array index (not id string), per the task's literal wording — `HybridRanker` never embeds anything itself; `cosineScores` is precomputed by the caller and passed in positionally aligned with `documents`.
+
+    One deliberate reconciliation beyond a straight port: BM25 and trigram raw scores are always computed regardless of weight (so `Hit.signals` stays populated for explainability even when a signal's weight is 0 — this already matched FMR's trigram behavior and its own test `normalizationCeilingIgnoresAZeroWeightSignal`). This port extends the same treatment to cosine, unlike FMR's `MetadataSearcher.computeSignals` which skipped computing cosine entirely when its weight was <= 0 as a cost-saving measure to avoid embedding the query — that optimization doesn't apply here since `cosineScores` is already precomputed by the caller. Only `fuseAndNormalize`'s `weight > 0.0` check decides what enters the fused ranking/ceiling.
+
+    TDD: wrote Tests/RankKitTests/HybridRankerTests.swift first (23 tests total) — confirmed RED (`cannot find 'HybridRanker' in scope`), then implemented to GREEN. One fixture bug found and fixed along the way: the "scale" catalog item's original body text ("adjusts replica count...") accidentally shared the trigram "epl" with the query "deploy" (via "repl-ica"), causing a legitimate but unintended nonzero score — reworded the fixture rather than touching production code.
+
+    Adversarial double-check (double-check agent) round 1: REVISE — (1) no test covered `cosineScores` present + `weights.cosine == 0.0` together (the exact scenario the cosine-always-computed deviation exists for), (2) `topMatches`/`fullOrdering` duplicated an identical two-precondition validation block. Both fixed: factored a private `validateInputs(ids:documents:cosineScores:)` helper called from both entry points; added `zeroWeightedCosineStillReportsRawSignalButIsExcludedFromFusion` and `zeroWeightedCosineDoesNotDilutePerfectSingleSignalNormalization` tests. Round 2 double-check: PASS — verified via mutation testing (reverted FMR's weight-gated cosine skip into the code, confirmed the new tests fail for the right reason, then restored) that the new tests are not tautological.
+
+    Final state: `swift test` fresh run — 119/119 tests pass across 9 suites, exit 0, no warnings. `swift build` clean, no warnings. Leaving in `doing` for /review per the implement workflow.
+  timestamp: 2026-07-13T15:13:04.620581+00:00
 depends_on:
 - 01KWYG0EARADAZ0ADAK2Q73PSJ
 - 01KWYG0NKKDA8X7GGT0KPE713N
-position_column: todo
-position_ordinal: '8880'
+position_column: doing
+position_ordinal: '80'
 title: Add SignalWeights + HybridRanker fusion pipeline
 ---
-## What
-Create `Sources/RankKit/HybridRanker.swift` (plan.md §6 phase 2) encoding the pipeline currently duplicated between `../CodeContextKit/Sources/CodeContextKit/Ops/SearchCode.swift` and `../FoundationModelsMetadataRegistry/Sources/FoundationModelsMetadataRegistry/MetadataSearcher.swift`:
-- `SignalWeights` struct: `bm25`/`trigram`/`cosine`, all default `1.0`, `Sendable`+`Equatable` (replaces CCK `SearchWeights` and FMR `Weights`).
-- `HybridRanker`: given per-document `RankedDocument`s, a query, optional cosine scores, and `SignalWeights`, produce the fused `[0,1]`-normalized, tie-broken ranking plus per-document raw `Signals`. Must encode once:
-  - `rankingOfPositiveScores(scores:)` (verbatim-identical in both repos today)
-  - the absent-signal rule: only signals with positive weight AND a non-empty ranking enter `RRF.fuse`/`RRF.normalize`
-  - two-field trigram scoring (`primaryFieldWeight` × primary Dice + `bodyFieldWeight` × body Dice)
-  - deterministic descending-score sort with ascending-index tie-break
-  - both output shapes: top-K matches-only (CCK `retrievalSearch` style) and full-catalog ordering with zero-scored tail (FMR `rankEntireCatalog` style, needed by the over-budget selection path)
-
-## Acceptance Criteria
-- [ ] On a shared fixture corpus, output ordering and normalized scores match what `MetadataSearcher.retrievalSearch` produces today (verify by porting 2–3 of FMR's `RetrievalSearchTests` expectations)
-- [ ] Full-ordering mode always returns exactly N results for an N-document corpus
-- [ ] Zero-weight and empty-ranking signals are excluded from the normalization ceiling (single-signal perfect match normalizes to 1.0)
-
-## Tests
-- [ ] `Tests/RankKitTests/HybridRankerTests.swift`: fusion cases ported/adapted from FMR's `RetrievalSearchTests.swift` and CCK's `SearchCodeTests.swift` fusion coverage; absent-signal rule cases; tie-break determinism case
-- [ ] Run `swift test` — exits 0
-
-## Workflow
-- Use `/tdd` — write failing tests first, then implement to make them pass.
+## What\nCreate `Sources/RankKit/HybridRanker.swift` (plan.md §6 phase 2) encoding the pipeline currently duplicated between `../CodeContextKit/Sources/CodeContextKit/Ops/SearchCode.swift` and `../FoundationModelsMetadataRegistry/Sources/FoundationModelsMetadataRegistry/MetadataSearcher.swift`:\n- `SignalWeights` struct: `bm25`/`trigram`/`cosine`, all default `1.0`, `Sendable`+`Equatable` (replaces CCK `SearchWeights` and FMR `Weights`).\n- `HybridRanker`: given per-document `RankedDocument`s, a query, optional cosine scores, and `SignalWeights`, produce the fused `[0,1]`-normalized, tie-broken ranking plus per-document raw `Signals`. Must encode once:\n  - `rankingOfPositiveScores(scores:)` (verbatim-identical in both repos today)\n  - the absent-signal rule: only signals with positive weight AND a non-empty ranking enter `RRF.fuse`/`RRF.normalize`\n  - two-field trigram scoring (`primaryFieldWeight` × primary Dice + `bodyFieldWeight` × body Dice)\n  - deterministic descending-score sort with ascending-index tie-break\n  - both output shapes: top-K matches-only (CCK `retrievalSearch` style) and full-catalog ordering with zero-scored tail (FMR `rankEntireCatalog` style, needed by the over-budget selection path)\n\n## Acceptance Criteria\n- [x] On a shared fixture corpus, output ordering and normalized scores match what `MetadataSearcher.retrievalSearch` produces today (verify by porting 2–3 of FMR's `RetrievalSearchTests` expectations)\n- [x] Full-ordering mode always returns exactly N results for an N-document corpus\n- [x] Zero-weight and empty-ranking signals are excluded from the normalization ceiling (single-signal perfect match normalizes to 1.0)\n\n## Tests\n- [x] `Tests/RankKitTests/HybridRankerTests.swift`: fusion cases ported/adapted from FMR's `RetrievalSearchTests.swift` and CCK's `SearchCodeTests.swift` fusion coverage; absent-signal rule cases; tie-break determinism case\n- [x] Run `swift test` — exits 0\n\n## Workflow\n- Use `/tdd` — write failing tests first, then implement to make them pass.
