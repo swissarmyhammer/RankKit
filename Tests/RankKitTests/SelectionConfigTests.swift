@@ -83,11 +83,11 @@ struct SelectionConfigTests {
 
     @Test
     func defaultForkReturnsSelfUnchanged() async throws {
-        let session = ScriptedAgentSession(response: "hello")
+        let session = MinimalAgentSession(response: "hello")
 
         let forked = try await session.fork()
 
-        #expect((forked as? ScriptedAgentSession) === session)
+        #expect((forked as? MinimalAgentSession) === session)
     }
 
     // MARK: - `respond(to:generating:)` round-trip decode
@@ -102,11 +102,11 @@ struct SelectionConfigTests {
     }
 }
 
-/// A minimal scripted `AgentSession` fake: always returns the same canned
-/// response, and relies on the protocol's default `fork()` (returns `self`)
-/// rather than overriding it — proving that default holds for a conformer
-/// with no real KV cache to fork from.
-private final class ScriptedAgentSession: AgentSession {
+/// A minimal scripted `AgentSession` fake that relies on the protocol's
+/// default `fork()` (returns `self`, unoverridden) rather than the shared
+/// `ScriptedAgentSession`'s call-counting override — proves that default
+/// holds for a conformer with no real KV cache to fork from.
+private final class MinimalAgentSession: AgentSession {
     private let response: String
 
     init(response: String = "") {
