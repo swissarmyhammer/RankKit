@@ -21,6 +21,39 @@ comments:
 
     Left in `doing` for `/review`.
   timestamp: 2026-07-13T19:06:02.776513+00:00
+- actor: claude-code
+  id: 01kxefhfwtfyhe8s5e31qr7g3j
+  text: |-
+    Fixed all 11 cited review findings (doc-comment first line missing a period) plus 8 additional un-cited instances of the same pattern in the same 4 files, root-caused as a project-wide convention rather than one-off fixes:
+
+    - Examples/FullMontyCore/Catalog.swift: 2 doc comments fixed (toolCatalog, demoQueries).
+    - Examples/FullMontyCore/Demo.swift: 8 doc comments fixed (FullMontyResult typealias, runFullMontyDemo, runNoModelDemo, runDefaultDemo, printCatalog, formattedMatches, printDiagnostic — printResults' doc was already correct).
+    - Examples/FullMontyCore/LiveRouter.swift: 5 doc comments fixed (rankKitIntegrationEnvVar, LiveDemoModels, resolveLiveFullMontyProfile, runLiveFullMontyDemo — isRankKitIntegrationEnabled's doc was already correct).
+    - Tests/RankKitTests/ExamplesSmokeTests.swift: 2 doc comments fixed (suite-level doc, result(containing:in:) helper).
+
+    Fix pattern: for every multi-line doc comment whose first line didn't end in a period, added a condensed one-sentence summary line ending in a period, followed by a `///` blank separator line, then kept the original detailed text verbatim as a following paragraph. No content was removed, only a proper period-terminated summary line was prepended. Used the reviewer's exact suggested summary text where a finding was cited; wrote analogous condensed summaries for the un-cited instances following the same style.
+
+    Verification:
+    - Grep-based scan (awk over `///` blocks) of all 4 files: zero doc comments remain whose first line lacks a trailing period.
+    - `mcp__sah__review review file` re-run against each of the 4 files individually: 0 findings on all four (was 11 findings before the fix).
+    - `swift build`: succeeds, only pre-existing benign warnings (swift-jinja unused-target pin, third-party mlx-swift C++ warnings) — same as before this change.
+    - `swift test`: 190/190 tests pass across 16 suites.
+
+    Checklist items flipped to [x]. Left in `doing` for `/review`.
+  timestamp: 2026-07-13T19:33:53.690409+00:00
+- actor: claude-code
+  id: 01kxefmavwfqxb14zja85d1wpw
+  text: |-
+    Adversarial double-check (subagent, independent review): PASS, no defects found.
+
+    - Verified `git diff` is comment-only across the 4 files (91 insertions / 35 deletions), no production code touched.
+    - Confirmed all 11 originally-cited findings fixed, matching reviewer-suggested summary text.
+    - Independently swept all `///` blocks in the 4 files: 17 total doc-comment blocks, all now end their first line in a period, including previously-compliant ones left untouched (printResults, isRankKitIntegrationEnabled).
+    - Confirmed no content lost — each edit is "prepend condensed summary + blank `///` + original detail" verbatim.
+    - Fresh `swift build` → Build complete (only pre-existing unrelated warnings). Fresh `swift test` → 190/190 tests pass, 16 suites.
+
+    Task is green. Left in `doing` for `/review`.
+  timestamp: 2026-07-13T19:35:26.844735+00:00
 depends_on:
 - 01KWYG3S45GN3CAR9K0NAVJCS9
 position_column: doing
@@ -49,3 +82,17 @@ Create `Examples/FullMontyCore/` (library) + `Examples/FullMonty/` (thin executa
 
 ## Adaptation note (SDK constraint, carried from ^2gk4k4r / ^navjcs9)
 The installed SDK's `SystemLanguageModel` exposes only `.default`, not `.fast`. `Searcher.defaultSessionFactory` (from ^navjcs9) already uses `.default` in `.fast`'s place, so there is no longer a second value for a `--model default` flag to swap to — `FullMonty` ships no `--model` flag; `Demo.swift`'s `runDefaultDemo` doc comment documents this explicitly. Everything else in the acceptance criteria/tests is implemented as specified.
+
+## Review Findings (2026-07-13 14:08)
+
+- [x] `Examples/FullMontyCore/Catalog.swift:17` — First line of doc comment doesn't end with a period — doc comment summary must be a complete sentence ending with period on the first line. Move the summary onto a single first line ending with a period: `/// A fixture catalog of ~50 common command-line tools, each an id and one-line description.`.
+- [x] `Examples/FullMontyCore/Catalog.swift:32` — First line of doc comment doesn't end with a period — doc comment summary must be a complete sentence ending with period on the first line. Condense the summary onto the first line ending with period: `/// Demo queries that overlap with catalog items to show keyword-only retrieval working well.`.
+- [x] `Examples/FullMontyCore/Demo.swift:9` — First line of doc comment doesn't end with a period — doc comment summary must be a complete sentence ending with period on the first line. Condense opening to: `/// Runs all demo queries against the catalog through a Searcher built from provided ingredients.` Then continue with expanded detail on subsequent paragraphs.
+- [x] `Examples/FullMontyCore/Demo.swift:43` — First line of doc comment doesn't end with a period — doc comment summary must be a complete sentence ending with period on the first line. Condense opening: `/// The default path: keyword-only retrieval with real agent selection on the on-device system model.` Then expand on next paragraph.
+- [x] `Examples/FullMontyCore/Demo.swift:62` — First line of doc comment doesn't end with a period — doc comment summary must be a complete sentence ending with period on the first line. Condense to: `/// Prints the tool catalog, one line per item.` Then expand with detail on next paragraph.
+- [x] `Examples/FullMontyCore/Demo.swift:70` — First line of doc comment doesn't end with a period — doc comment summary must be a complete sentence ending with period on the first line. Condense opening: `/// Formats matches into lines with rank, id, score, and signal breakdown.` Then expand on next paragraph.
+- [x] `Examples/FullMontyCore/Demo.swift:88` — First line of doc comment doesn't end with a period — doc comment summary must be a complete sentence ending with period on the first line. Condense opening: `/// Prints a single diagnostic emitted by Searcher or its selection tier.` Then expand on next paragraph.
+- [x] `Examples/FullMontyCore/LiveRouter.swift:14` — First line of doc comment doesn't end with a period — doc comment summary must be a complete sentence ending with period on the first line. Condense opening: `/// Environment variable enabling FullMonty's real-model path (name: `rankKitIntegrationEnvVar`).` Then expand on next paragraph.
+- [x] `Examples/FullMontyCore/LiveRouter.swift:26` — First line of doc comment doesn't end with a period — doc comment summary must be a complete sentence ending with period on the first line. Condense opening: `/// Resolves a real, on-device model profile through a live Router.` Then expand on next paragraph.
+- [x] `Examples/FullMontyCore/LiveRouter.swift:33` — First line of doc comment doesn't end with a period — doc comment summary must be a complete sentence ending with period on the first line. Condense opening: `/// Runs the full demo over a live Router-resolved profile with embedding and selection.` Then expand on next paragraph.
+- [x] `Tests/RankKitTests/ExamplesSmokeTests.swift:22` — First line of doc comment doesn't end with a period — documentation comment summary must be a complete sentence ending with period on the first line, even for private declarations. Condense to: `/// Locates the FullMontyResult matching the given substring in its query.` Then expand with detail on next paragraph.

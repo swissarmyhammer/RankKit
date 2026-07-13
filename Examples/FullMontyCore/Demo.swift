@@ -11,10 +11,11 @@
 import Foundation
 import RankKit
 
-/// One `demoQueries` entry's result: the query itself, alongside its ranked
-/// or selected matches.
+/// One `demoQueries` entry's result: the query itself alongside its ranked or selected matches.
 public typealias FullMontyResult = (query: String, matches: [SelectionMatch])
 
+/// Runs all demo queries against the catalog through a Searcher built from provided ingredients.
+///
 /// Runs every `demoQueries` entry against `toolCatalog` through a `Searcher`
 /// built from the given ingredients — the shared plumbing every one of
 /// `FullMonty`'s three paths (`--no-model`, the default on-device-system-
@@ -54,8 +55,9 @@ public func runFullMontyDemo(
     return results
 }
 
-/// `--no-model`'s degraded, GPU-free path (plan.md §3a "the CI-safe path"):
-/// no embedder (keyword-only BM25 + trigram retrieval), no selection
+/// `--no-model`'s degraded, GPU-free path (plan.md §3a "the CI-safe path").
+///
+/// No embedder (keyword-only BM25 + trigram retrieval), no selection
 /// session — `mode: .retrieval` so `Searcher.search(_:limit:)` never even
 /// tries to consult a model.
 ///
@@ -71,11 +73,12 @@ public func runNoModelDemo(
     try await runFullMontyDemo(embedder: nil, session: nil, mode: .retrieval, onDiagnostic: onDiagnostic)
 }
 
-/// The default path run with no flags and no gated env var set: no
-/// embedder (still keyword-only retrieval signal-wise — a live embedder
-/// needs the gated Router path), but `session:
-/// Searcher.defaultSessionFactory` so `mode: .auto` drives real selection
-/// on the on-device system model.
+/// The default path: keyword-only retrieval with real agent selection on the on-device system model.
+///
+/// Run with no flags and no gated env var set: no embedder (still
+/// keyword-only retrieval signal-wise — a live embedder needs the gated
+/// Router path), but `session: Searcher.defaultSessionFactory` so `mode:
+/// .auto` drives real selection on the on-device system model.
 ///
 /// Explicitly passes `Searcher.defaultSessionFactory` (rather than omitting
 /// `session:` and letting `Searcher.init`'s own default argument supply it)
@@ -99,8 +102,9 @@ public func runDefaultDemo(
 
 // MARK: - Printing
 
-/// Prints `toolCatalog`, one line per tool — used by every path so a run
-/// always shows what's being searched.
+/// Prints the tool catalog, one line per item.
+///
+/// Used by every path so a run always shows what's being searched.
 public func printCatalog() {
     print("FullMonty catalog (\(toolCatalog.count) tools):")
     for item in toolCatalog {
@@ -108,6 +112,8 @@ public func printCatalog() {
     }
 }
 
+/// Formats matches into lines with rank, id, score, and signal breakdown.
+///
 /// Formats one query's matches, one line each, with their per-signal
 /// breakdown when retrieval produced one — mirrors
 /// FoundationModelsMetadataRegistry's `Examples/ExamplesSupport
@@ -139,9 +145,11 @@ public func printResults(_ results: [FullMontyResult]) {
     }
 }
 
-/// Prints one diagnostic `Searcher` or its selection tier emitted — RankKit
-/// itself never logs on a caller's behalf (`RankDiagnostic.swift`'s header),
-/// so every `Examples/` target owns printing its own.
+/// Prints a single diagnostic emitted by Searcher or its selection tier.
+///
+/// RankKit itself never logs on a caller's behalf
+/// (`RankDiagnostic.swift`'s header), so every `Examples/` target owns
+/// printing its own.
 ///
 /// - Parameter diagnostic: the diagnostic to print.
 public func printDiagnostic(_ diagnostic: RankDiagnostic) {

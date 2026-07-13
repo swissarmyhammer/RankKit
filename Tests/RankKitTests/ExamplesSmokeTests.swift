@@ -2,9 +2,10 @@ import FullMontyCore
 import RankKit
 import Testing
 
-/// Smoke tests for the `FullMonty` example (plan.md §3a): `FullMontyCore`
-/// factors its entry logic into callable functions living in a plain
-/// library target, the same shape as
+/// Smoke tests for the `FullMonty` example (plan.md §3a).
+///
+/// `FullMontyCore` factors its entry logic into callable functions living in
+/// a plain library target, the same shape as
 /// FoundationModelsMetadataRegistry's own `ExamplesSmokeTests` drives its
 /// `*Core` targets through. These tests import `FullMontyCore` directly and
 /// assert on real output — no `swift run` subprocess spawning — covering
@@ -19,8 +20,9 @@ import Testing
 struct ExamplesSmokeTests {
     // MARK: - Fixtures
 
-    /// Locates the one `FullMontyResult` whose query contains `substring` —
-    /// avoids re-typing `demoQueries`' exact wording in every assertion.
+    /// Locates the `FullMontyResult` matching the given substring in its query.
+    ///
+    /// Avoids re-typing `demoQueries`' exact wording in every assertion.
     private func result(containing substring: String, in results: [FullMontyResult]) throws -> FullMontyResult {
         try #require(results.first { $0.query.contains(substring) })
     }

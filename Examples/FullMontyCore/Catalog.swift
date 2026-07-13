@@ -14,10 +14,10 @@
 
 import RankKit
 
-/// `FullMonty`'s fixture catalog: ~50 common command-line tools an id and a
-/// one-line description of what it does. Every `SearchItem`'s `summary`
-/// defaults to its `text` — this catalog has nothing shorter to offer the
-/// selection prefix.
+/// A fixture catalog of ~50 common command-line tools, each an id and one-line description.
+///
+/// Every `SearchItem`'s `summary` defaults to its `text` — this catalog has
+/// nothing shorter to offer the selection prefix.
 public let toolCatalog: [SearchItem] = [
     SearchItem(id: "grep", text: "Search file contents with regular expressions"),
     SearchItem(id: "glob", text: "Find files by name pattern, sorted by mtime"),
@@ -71,6 +71,8 @@ public let toolCatalog: [SearchItem] = [
     SearchItem(id: "netstat", text: "List active network connections and listening ports"),
 ]
 
+/// Demo queries that overlap with catalog items to show keyword-only retrieval working well.
+///
 /// The handful of queries `FullMonty` demonstrates the catalog with (plan.md
 /// §3a "a handful of queries"). Each is worded to overlap heavily — in
 /// wording, not just meaning — with exactly one catalog item's `text`, so

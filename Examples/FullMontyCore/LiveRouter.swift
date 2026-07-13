@@ -27,6 +27,8 @@ import MLXLMCommon
 import RankKit
 import Tokenizers
 
+/// Environment variable enabling FullMonty's real-model path (name: `rankKitIntegrationEnvVar`).
+///
 /// The opt-in environment variable gating `FullMonty`'s real-model path
 /// (plan.md §3a), mirroring FoundationModelsMetadataRegistry's own
 /// `METADATA_REGISTRY_INTEGRATION_TESTS` convention. Unset (the default),
@@ -38,17 +40,19 @@ public var isRankKitIntegrationEnabled: Bool {
     ProcessInfo.processInfo.environment[rankKitIntegrationEnvVar] != nil
 }
 
-/// The tiny, deliberately small `mlx-community` models `FullMonty`'s gated
-/// path resolves — cheap enough for a local demo run, matching the model
-/// pair FoundationModelsMetadataRegistry's own gated `Examples/` demos share.
+/// The tiny, deliberately small `mlx-community` models FullMonty's gated path resolves.
+///
+/// Cheap enough for a local demo run, matching the model pair
+/// FoundationModelsMetadataRegistry's own gated `Examples/` demos share.
 private enum LiveDemoModels {
     static let generation: ModelRef = "mlx-community/SmolLM-135M-Instruct-4bit"
     static let embedding: ModelRef = "mlx-community/bge-small-en-v1.5-4bit"
 }
 
-/// Resolves a real, on-device model profile through a live `Router` — the
-/// one path `FullMonty`'s real-model story touches the network/GPU through.
-/// Mirrors FoundationModelsRouter's own gated integration suite and
+/// Resolves a real, on-device model profile through a live Router.
+///
+/// The one path `FullMonty`'s real-model story touches the network/GPU
+/// through. Mirrors FoundationModelsRouter's own gated integration suite and
 /// FoundationModelsMetadataRegistry's `LiveRouterSupport
 /// .resolveLiveProfile(demoLabel:name:description:)`.
 ///
@@ -75,11 +79,12 @@ public func resolveLiveFullMontyProfile() async throws -> LanguageModelProfile {
     return try await router.resolve(profile: profileDefinition, reporting: ResolutionProgress())
 }
 
-/// Runs `runFullMontyDemo(embedder:session:mode:limit:onDiagnostic:)` over a
-/// live Router-resolved profile: `profile.embedding` joins retrieval's
-/// cosine signal, and `profile.standard` answers selection through a
-/// grammar-constrained guided session — "the full monty" plan.md §3a
-/// describes, both signals and the agent final pick over a real model.
+/// Runs the full demo over a live Router-resolved profile with embedding and selection.
+///
+/// `profile.embedding` joins retrieval's cosine signal, and
+/// `profile.standard` answers selection through a grammar-constrained
+/// guided session — "the full monty" plan.md §3a describes, both signals
+/// and the agent final pick over a real model.
 ///
 /// The selection grammar is derived once, over the whole catalog's ids: the
 /// ~50-item `toolCatalog` stays comfortably under
