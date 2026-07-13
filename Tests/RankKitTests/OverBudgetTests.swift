@@ -372,26 +372,7 @@ struct OverBudgetTests {
         // two semantically-identical grammars can legitimately differ
         // byte-for-byte.
         let receivedGrammar = try #require(factory.receivedGrammars.first)
-        #expect(try Self.enumIds(in: receivedGrammar) == ["alpha", "bravo"])
-    }
-
-    /// Extracts the `properties.ids.items.enum` id set a `.jsonSchema`
-    /// `Grammar` constrains to -- lets a test assert on grammar *content*
-    /// without depending on `JSONSerialization`'s unstable key ordering,
-    /// which makes two separately-encoded but equivalent grammars compare
-    /// unequal under `Grammar`'s raw-string `Equatable`.
-    private static func enumIds(in grammar: Grammar) throws -> Set<String> {
-        guard case .jsonSchema(let source) = grammar else {
-            Issue.record("expected a .jsonSchema grammar")
-            return []
-        }
-        let data = try #require(source.data(using: .utf8))
-        let root = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let properties = try #require(root["properties"] as? [String: Any])
-        let idsSchema = try #require(properties["ids"] as? [String: Any])
-        let itemsSchema = try #require(idsSchema["items"] as? [String: Any])
-        let enumValues = try #require(itemsSchema["enum"] as? [String])
-        return Set(enumValues)
+        #expect(try GrammarTestSupport.enumIds(in: receivedGrammar) == ["alpha", "bravo"])
     }
 
     @Test
