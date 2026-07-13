@@ -89,6 +89,17 @@ struct SelectionConfigTests {
 
         #expect((forked as? ScriptedAgentSession) === session)
     }
+
+    // MARK: - `respond(to:generating:)` round-trip decode
+
+    @Test
+    func respondGeneratingDecodesScriptedJSONIntoASelection() async throws {
+        let session = ScriptedAgentSession(response: #"{"ids":["a","b"]}"#)
+
+        let selection = try await session.respond(to: "prompt", generating: Selection.self)
+
+        #expect(selection.ids == ["a", "b"])
+    }
 }
 
 /// A minimal scripted `AgentSession` fake: always returns the same canned

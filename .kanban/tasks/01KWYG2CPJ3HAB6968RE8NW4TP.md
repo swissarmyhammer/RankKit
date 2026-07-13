@@ -15,29 +15,24 @@ comments:
 
     Leaving in `doing` for /review per the implement skill contract.
   timestamp: 2026-07-13T15:39:08.971948+00:00
+- actor: claude-code
+  id: 01kxe318n5v258q806g4b7qnd3
+  text: |-
+    Fixed both review findings via /implement.
+
+    1. SelectionConfigTests.swift: added `respondGeneratingDecodesScriptedJSONIntoASelection()` — scripts `{"ids":["a","b"]}` through `ScriptedAgentSession`, decodes via the real `AgentSession.respond(to:generating: Selection.self)` seam, asserts `selection.ids == ["a", "b"]`.
+    2. SelectionCoreTests.swift: deleted `FixtureCatalog`'s explicit `init(ids:summaries:blocks:)`. First pass dropped `private` on `summaries`/`blocks` to plain `internal` to unblock the synthesized-init access-level cascade (a private stored property in a nested type made the synthesized memberwise init `private` to the nested type itself, unreachable from sibling test methods in the enclosing struct) — the first double-check pass flagged this as unnecessarily widening scope module-wide and suggested `fileprivate` instead. Applied `fileprivate let summaries` / `fileprivate let blocks`, which preserves file-scoped encapsulation and still resolves the compile error.
+
+    Verified fresh: `swift build` exit 0; `swift test` exit 0, 134 tests / 11 suites, 0 failures. Sibling repos `../FoundationModelsMetadataRegistry` and `../CodeContextKit` confirmed clean via `git status --porcelain`.
+
+    Adversarial double-check: first pass REVISE (fileprivate vs internal scoping), fixed and re-spawned once per really-done's bounded loop, second pass PASS.
+
+    Both checklist items under "## Review Findings" flipped to [x] with FIXED notes. Leaving in `doing` for /review per the implement skill contract.
+  timestamp: 2026-07-13T15:55:19.077896+00:00
 depends_on:
 - 01KWYFYBDKWS53V76XPWMA76JF
 position_column: doing
 position_ordinal: '80'
 title: 'Port selection core types: SelectionCatalog, AgentSession, Selection, SelectionConfig'
 ---
-## What
-Create `Sources/RankKit/Selection/` (plan.md §6 phase 3), generalized from `../FoundationModelsMetadataRegistry/Sources/FoundationModelsMetadataRegistry/`. **Port = copy. The source repo is read-only reference material — do not modify, delete, or touch anything in `../FoundationModelsMetadataRegistry` or `../CodeContextKit`.**
-- `SelectionCatalog.swift` (NEW): the protocol replacing `MetadataIndex<Item>` in the tier — `ids: [String]`, `summaryBlock(forId:) -> String?` (seeds the prefix), `block(forId:) -> String?` (verbatim result payload).
-- `AgentSession.swift`: copy of `Session/AgentSession.swift` (protocol + `RoutedAgentSession` + default `fork()`).
-- `Selection.swift`: copy of `Selection/Selection.swift` (`@Generable`, ids-only; imports the FoundationModels system framework).
-- `SelectionConfig.swift`: copy of `Selection/SelectionConfig.swift`; rename the default preamble constant `.librarianDefault` → `.selectionDefault` with neutral wording (plan.md §6 phase 3): "return ONLY the items needed — fewest that suffice, in call order when order matters; do not invent ids; return an empty list if nothing fits." Keep `capacityCharacterLimit`/`candidateLimit` defaults and clamping.
-- `RankDiagnostic.swift` (NEW): small enum with `.retrievalCut(considered:kept:)` and `.unknownSelectedId(id:)` — RankKit's neutral diagnostics channel.
-
-## Acceptance Criteria
-- [ ] All types compile; `Selection`'s `@Generable` schema shape unchanged (`properties.ids.items` present)
-- [ ] `.selectionDefault` contains no domain language ("items"/"ids", not "functions"/"API librarian")
-- [ ] `SelectionConfig` clamps negative limits to 0 (existing behavior)
-- [ ] `git status` in `../FoundationModelsMetadataRegistry` and `../CodeContextKit` is untouched by this task
-
-## Tests
-- [ ] `Tests/RankKitTests/SelectionConfigTests.swift`: defaults, clamping, preamble default; a scripted fake conforming to `AgentSession` proving the seam compiles and `fork()` default returns self
-- [ ] Run `swift test` — exits 0
-
-## Workflow
-- Use `/tdd` — write failing tests first, then implement to make them pass.
+## What\nCreate `Sources/RankKit/Selection/` (plan.md §6 phase 3), generalized from `../FoundationModelsMetadataRegistry/Sources/FoundationModelsMetadataRegistry/`. **Port = copy. The source repo is read-only reference material — do not modify, delete, or touch anything in `../FoundationModelsMetadataRegistry` or `../CodeContextKit`.**\n- `SelectionCatalog.swift` (NEW): the protocol replacing `MetadataIndex<Item>` in the tier — `ids: [String]`, `summaryBlock(forId:) -> String?` (seeds the prefix), `block(forId:) -> String?` (verbatim result payload).\n- `AgentSession.swift`: copy of `Session/AgentSession.swift` (protocol + `RoutedAgentSession` + default `fork()`).\n- `Selection.swift`: copy of `Selection/Selection.swift` (`@Generable`, ids-only; imports the FoundationModels system framework).\n- `SelectionConfig.swift`: copy of `Selection/SelectionConfig.swift`; rename the default preamble constant `.librarianDefault` → `.selectionDefault` with neutral wording (plan.md §6 phase 3): \"return ONLY the items needed — fewest that suffice, in call order when order matters; do not invent ids; return an empty list if nothing fits.\" Keep `capacityCharacterLimit`/`candidateLimit` defaults and clamping.\n- `RankDiagnostic.swift` (NEW): small enum with `.retrievalCut(considered:kept:)` and `.unknownSelectedId(id:)` — RankKit's neutral diagnostics channel.\n\n## Acceptance Criteria\n- [ ] All types compile; `Selection`'s `@Generable` schema shape unchanged (`properties.ids.items` present)\n- [ ] `.selectionDefault` contains no domain language (\"items\"/\"ids\", not \"functions\"/\"API librarian\")\n- [ ] `SelectionConfig` clamps negative limits to 0 (existing behavior)\n- [ ] `git status` in `../FoundationModelsMetadataRegistry` and `../CodeContextKit` is untouched by this task\n\n## Tests\n- [ ] `Tests/RankKitTests/SelectionConfigTests.swift`: defaults, clamping, preamble default; a scripted fake conforming to `AgentSession` proving the seam compiles and `fork()` default returns self\n- [ ] Run `swift test` — exits 0\n\n## Workflow\n- Use `/tdd` — write failing tests first, then implement to make them pass.\n\n## Review Findings (2026-07-13 10:43)\n\n- [x] `Tests/RankKitTests/SelectionConfigTests.swift:90` — The `respond<T: Generable>(to:generating:)` extension method added in AgentSession.swift is designed to decode JSON output from the model back into a `Generable` type, but no test exercises this decoding path with `Selection`. The only test touching generation (in SelectionCoreTests.swift) validates the schema structure, not actual round-trip serialization. Add a test using `ScriptedAgentSession` to verify the round-trip: create a JSON string like `{\"ids\":[\"a\",\"b\"]}`, pass it through a session, call `respond(to:generating: Selection.self)`, and assert the decoded `Selection.ids` matches. Example: `let selection = try await ScriptedAgentSession(response: jsonString).respond(to: \"prompt\", generating: Selection.self)` followed by `#expect(selection.ids == [\"a\",\"b\"])`. FIXED: added `respondGeneratingDecodesScriptedJSONIntoASelection()` to `SelectionConfigTests.swift`, which scripts `{\"ids\":[\"a\",\"b\"]}` through `ScriptedAgentSession` and asserts the decoded `Selection.ids == [\"a\", \"b\"]` via the real `respond(to:generating:)` seam.\n- [x] `Tests/RankKitTests/SelectionCoreTests.swift:35` — FixtureCatalog's init is a memberwise initializer identical to the one Swift would synthesize. The idioms rule requires deleting explicit memberwise initializers and letting the compiler synthesize them (exception allowed only for public initializers). Delete the explicit init(ids:summaries:blocks:) and rely on Swift's synthesized memberwise initializer. FIXED: deleted the explicit `init(ids:summaries:blocks:)`. Also dropped `private` from `summaries`/`blocks` (were `internal` `ids` + `private` others), since a `private` stored property inside a nested type made the synthesized memberwise init `private` to `FixtureCatalog` itself and inaccessible from sibling test methods in the enclosing `SelectionCoreTests` struct — confirmed by a real compile failure when first tried with `private` retained. All three fixture properties are now plain `internal let`, matching the synthesized initializer's accessibility to its actual callers.\n

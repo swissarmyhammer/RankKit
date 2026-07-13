@@ -32,14 +32,8 @@ struct SelectionCoreTests {
 
     struct FixtureCatalog: SelectionCatalog {
         let ids: [String]
-        private let summaries: [String: String]
-        private let blocks: [String: String]
-
-        init(ids: [String], summaries: [String: String], blocks: [String: String]) {
-            self.ids = ids
-            self.summaries = summaries
-            self.blocks = blocks
-        }
+        fileprivate let summaries: [String: String]
+        fileprivate let blocks: [String: String]
 
         func summaryBlock(forId id: String) -> String? { summaries[id] }
         func block(forId id: String) -> String? { blocks[id] }
