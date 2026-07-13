@@ -5,9 +5,14 @@
 // unlike `MetadataDiagnostic.log(_:)`, consumers map `RankDiagnostic` into
 // their own diagnostics or logging rather than RankKit logging on their
 // behalf.
+//
+// `.embeddingUnavailable` is added by the `Searcher` facade task (plan.md
+// §3a): the retrieval-tier counterpart to `MetadataDiagnostic
+// .embeddingUnavailable`, reported whenever `Searcher` degrades the cosine
+// signal to keyword-only.
 
 /// RankKit's neutral diagnostics channel: graceful-degradation events a
-/// selection tier reports, never silently.
+/// selection tier or the `Searcher` facade reports, never silently.
 ///
 /// Consumers map these into their own diagnostics or logging surface --
 /// RankKit itself never logs on a caller's behalf.
@@ -21,4 +26,9 @@ public enum RankDiagnostic: Sendable, Equatable {
     /// candidate set. Structurally unreachable given grammar-constrained
     /// output, but defended against anyway.
     case unknownSelectedId(id: String)
+
+    /// No embedder is configured for the cosine signal (or embedding the
+    /// query itself failed), so retrieval degraded to keyword-only (BM25 +
+    /// trigram) for this search.
+    case embeddingUnavailable
 }

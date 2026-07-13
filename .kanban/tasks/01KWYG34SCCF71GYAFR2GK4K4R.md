@@ -28,8 +28,8 @@ comments:
   timestamp: 2026-07-13T17:31:05.006925+00:00
 depends_on:
 - 01KWYG2CPJ3HAB6968RE8NW4TP
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8980'
 title: Conform Apple LanguageModelSession to AgentSession
 ---
 ## What
