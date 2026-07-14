@@ -1,6 +1,6 @@
-# RankKit
+# FoundationModelsRanker
 
-[![CI](https://github.com/swissarmyhammer/RankKit/actions/workflows/ci.yml/badge.svg)](https://github.com/swissarmyhammer/RankKit/actions/workflows/ci.yml)
+[![CI](https://github.com/swissarmyhammer/FoundationModelsRanker/actions/workflows/ci.yml/badge.svg)](https://github.com/swissarmyhammer/FoundationModelsRanker/actions/workflows/ci.yml)
 
 Hybrid search and ranking for Swift: give it a list of things and a query,
 get back ranked results. Under the hood it fuses BM25 keyword matching,
@@ -10,7 +10,7 @@ candidates. Targets macOS 27+ and depends on
 [FoundationModelsRouter](https://github.com/swissarmyhammer/FoundationModelsRouter).
 
 ```swift
-import RankKit
+import FoundationModelsRanker
 
 // The things to search: an id and the text that describes it.
 let items = [
@@ -47,7 +47,7 @@ including how to resolve `profile` from a live `Router`:
 
 ```swift
 import FoundationModelsRouter
-import RankKit
+import FoundationModelsRanker
 
 let grammar = try SelectionTier.idEnumGrammar(ids: items.map(\.id))
 let searcher = try await Searcher(
@@ -88,7 +88,7 @@ failing.
 Add the package to `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/swissarmyhammer/RankKit", branch: "main")
+.package(url: "https://github.com/swissarmyhammer/FoundationModelsRanker", branch: "main")
 ```
 
 ## License

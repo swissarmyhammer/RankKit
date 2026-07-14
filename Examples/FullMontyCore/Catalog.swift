@@ -4,7 +4,7 @@
 // (`grep`/`glob`/`watch`), expanded here into the living proof of that
 // documentation.
 //
-// New to RankKit — no source file to port: neither CodeContextKit nor
+// New to FoundationModelsRanker — no source file to port: neither CodeContextKit nor
 // FoundationModelsMetadataRegistry ships a catalog this shape (plan.md §3a
 // "`Examples/FullMonty` is the living proof"). Modeled structurally on
 // FoundationModelsMetadataRegistry's `Examples/ExamplesSupport`'s
@@ -12,7 +12,7 @@
 // broader command-line surface so the demo has enough breadth to show BM25 +
 // trigram fusion doing real work.
 
-import RankKit
+import FoundationModelsRanker
 
 /// A fixture catalog of ~50 common command-line tools, each an id and one-line description.
 ///

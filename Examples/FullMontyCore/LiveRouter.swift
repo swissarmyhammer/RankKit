@@ -6,10 +6,10 @@
 // resolve one profile through a live `Router`, adapt its `.embedding` slot
 // as a `TextEmbedding`, and grammar-constrain its `.standard` slot for
 // selection — folded directly into this target rather than split into its
-// own `LiveRouterSupport` target, since `FullMonty` is (so far) RankKit's
+// own `LiveRouterSupport` target, since `FullMonty` is (so far) FoundationModelsRanker's
 // only example with a gated path to share it with.
 //
-// New to RankKit — no source file to port (plan.md §3a); the shape is
+// New to FoundationModelsRanker — no source file to port (plan.md §3a); the shape is
 // FoundationModelsMetadataRegistry's own `LiveRouterSupport
 // .resolveLiveProfile(demoLabel:name:description:)` /
 // `buildLiveEmbedder(demoLabel:name:description:)`, generalized to build
@@ -24,20 +24,20 @@ import FoundationModelsRouter
 import HuggingFace
 import MLXHuggingFace
 import MLXLMCommon
-import RankKit
+import FoundationModelsRanker
 import Tokenizers
 
-/// Environment variable enabling FullMonty's real-model path (name: `rankKitIntegrationEnvVar`).
+/// Environment variable enabling FullMonty's real-model path (name: `foundationModelsRankerIntegrationEnvVar`).
 ///
 /// The opt-in environment variable gating `FullMonty`'s real-model path
 /// (plan.md §3a), mirroring FoundationModelsMetadataRegistry's own
 /// `METADATA_REGISTRY_INTEGRATION_TESTS` convention. Unset (the default),
 /// `FullMonty` never touches the network or GPU.
-public let rankKitIntegrationEnvVar = "RANKKIT_INTEGRATION_TESTS"
+public let foundationModelsRankerIntegrationEnvVar = "FOUNDATIONMODELSRANKER_INTEGRATION_TESTS"
 
 /// Whether `FullMonty`'s gated real-model path is enabled for this run.
-public var isRankKitIntegrationEnabled: Bool {
-    ProcessInfo.processInfo.environment[rankKitIntegrationEnvVar] != nil
+public var isFoundationModelsRankerIntegrationEnabled: Bool {
+    ProcessInfo.processInfo.environment[foundationModelsRankerIntegrationEnvVar] != nil
 }
 
 /// The tiny, deliberately small `mlx-community` models FullMonty's gated path resolves.
@@ -71,7 +71,7 @@ public func resolveLiveFullMontyProfile() async throws -> LanguageModelProfile {
     )
     let profileDefinition = ProfileDefinition(
         name: "full-monty-demo",
-        description: "Tiny co-resident models sized for a local demo run of RankKit's full pipeline.",
+        description: "Tiny co-resident models sized for a local demo run of FoundationModelsRanker's full pipeline.",
         standard: [LiveDemoModels.generation],
         flash: [LiveDemoModels.generation],
         embedding: [LiveDemoModels.embedding]

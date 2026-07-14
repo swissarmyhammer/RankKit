@@ -9,7 +9,7 @@ import PackageDescription
 /// a single source of truth, following the pattern established by the
 /// sibling FoundationModelsRouter and FoundationModelsMetadataRegistry
 /// packages.
-let packageName = "RankKit"
+let packageName = "FoundationModelsRanker"
 
 /// The name of the FoundationModelsRouter dependency package.
 ///
@@ -65,7 +65,7 @@ let liveRouterProductDependencies: [Target.Dependency] = [
     .product(name: "Tokenizers", package: transformersPackage),
 ]
 
-/// The SwiftPM manifest for RankKit (plan.md §3).
+/// The SwiftPM manifest for FoundationModelsRanker (plan.md §3).
 ///
 /// A single library target depending on FoundationModelsRouter, a Swift
 /// Testing unit test target, and the `Examples/FullMonty` /
@@ -126,7 +126,7 @@ let package = Package(
         // header. A plain library (not the executable itself) so
         // `ExamplesSmokeTests` can invoke its GPU-free paths directly.
         // Depends on the full `liveRouterProductDependencies` quintet for
-        // its gated real-model path (behind `RANKKIT_INTEGRATION_TESTS`);
+        // its gated real-model path (behind `FOUNDATIONMODELSRANKER_INTEGRATION_TESTS`);
         // every other path (the default on-device-system-model path, and
         // `--no-model`) never touches them.
         .target(
@@ -137,7 +137,7 @@ let package = Package(
         // A thin runnable entry point over `FullMontyCore`. `swift build`
         // compiles this GPU-free; `swift run FullMonty --no-model` runs the
         // degraded keyword-only path GPU-free; the default (on-device
-        // system model) and `RANKKIT_INTEGRATION_TESTS`-gated (live Router)
+        // system model) and `FOUNDATIONMODELSRANKER_INTEGRATION_TESTS`-gated (live Router)
         // paths need Apple Intelligence / a live Router respectively.
         .executableTarget(
             name: "FullMonty",

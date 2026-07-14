@@ -4,7 +4,7 @@ import FullMontyCore
 ///
 /// Three paths, gated in this order:
 ///
-/// - `RANKKIT_INTEGRATION_TESTS` set: resolves a live Router + tiny
+/// - `FOUNDATIONMODELSRANKER_INTEGRATION_TESTS` set: resolves a live Router + tiny
 ///   mlx-community model, joining the cosine signal into retrieval and
 ///   answering selection through a real, grammar-constrained model — "the
 ///   full monty."
@@ -18,10 +18,10 @@ import FullMontyCore
 /// The actual search logic lives in `FullMontyCore` so `ExamplesSmokeTests`
 /// can invoke its GPU-free paths directly; this file is just the runnable
 /// entry point. Run with `swift run FullMonty`, `swift run FullMonty
-/// --no-model`, or `RANKKIT_INTEGRATION_TESTS=1 swift run FullMonty`.
+/// --no-model`, or `FOUNDATIONMODELSRANKER_INTEGRATION_TESTS=1 swift run FullMonty`.
 
-if isRankKitIntegrationEnabled {
-    print("\(rankKitIntegrationEnvVar) set -- running the full monty against a live Router + tiny mlx-community model.\n")
+if isFoundationModelsRankerIntegrationEnabled {
+    print("\(foundationModelsRankerIntegrationEnvVar) set -- running the full monty against a live Router + tiny mlx-community model.\n")
     let results = try await runLiveFullMontyDemo(onDiagnostic: printDiagnostic)
     printResults(results)
 } else if CommandLine.arguments.contains("--no-model") {
@@ -32,7 +32,7 @@ if isRankKitIntegrationEnabled {
     print(
         """
         Running the default path: keyword-only retrieval, real agent selection on the on-device system model.
-        Pass --no-model for the GPU-free keyword-only path, or set \(rankKitIntegrationEnvVar) for the live \
+        Pass --no-model for the GPU-free keyword-only path, or set \(foundationModelsRankerIntegrationEnvVar) for the live \
         Router + tiny mlx-community model path.
 
         """

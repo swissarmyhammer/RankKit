@@ -6,10 +6,10 @@
 // FoundationModelsMetadataRegistry's `CatalogSearchCore`/`SemanticSearchCore`
 // pattern.
 //
-// New to RankKit — no source file to port (plan.md §3a).
+// New to FoundationModelsRanker — no source file to port (plan.md §3a).
 
 import Foundation
-import RankKit
+import FoundationModelsRanker
 
 /// One `demoQueries` entry's result: the query itself alongside its ranked or selected matches.
 public typealias FullMontyResult = (query: String, matches: [SelectionMatch])
@@ -19,7 +19,7 @@ public typealias FullMontyResult = (query: String, matches: [SelectionMatch])
 /// Runs every `demoQueries` entry against `toolCatalog` through a `Searcher`
 /// built from the given ingredients — the shared plumbing every one of
 /// `FullMonty`'s three paths (`--no-model`, the default on-device-system-
-/// model path, and the `RANKKIT_INTEGRATION_TESTS`-gated live-Router path)
+/// model path, and the `FOUNDATIONMODELSRANKER_INTEGRATION_TESTS`-gated live-Router path)
 /// drives through, differing only in which `embedder`/`session` they supply.
 ///
 /// - Parameters:
@@ -117,7 +117,7 @@ public func printCatalog() {
 /// Formats one query's matches, one line each, with their per-signal
 /// breakdown when retrieval produced one — mirrors
 /// FoundationModelsMetadataRegistry's `Examples/ExamplesSupport
-/// .formattedMatches(matches:)`, adapted to RankKit's catalog-agnostic
+/// .formattedMatches(matches:)`, adapted to FoundationModelsRanker's catalog-agnostic
 /// `SelectionMatch` (no generic `Item`).
 ///
 /// - Parameter matches: the matches to format, in ranked or selected order.
@@ -147,7 +147,7 @@ public func printResults(_ results: [FullMontyResult]) {
 
 /// Prints a single diagnostic emitted by Searcher or its selection tier.
 ///
-/// RankKit itself never logs on a caller's behalf
+/// FoundationModelsRanker itself never logs on a caller's behalf
 /// (`RankDiagnostic.swift`'s header), so every `Examples/` target owns
 /// printing its own.
 ///

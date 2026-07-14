@@ -1,12 +1,12 @@
-# RankKit — extract the shared search/ranking primitives
+# FoundationModelsRanker — extract the shared search/ranking primitives
 
 Extract the hybrid-search primitives duplicated between `../CodeContextKit` and
 `../FoundationModelsMetadataRegistry` into this package so both repos can
-depend on it. This plan covers **only RankKit** — each consumer's migration is
+depend on it. This plan covers **only FoundationModelsRanker** — each consumer's migration is
 a separate job, planned in that repo (§6a). This is the extraction FoundationModelsMetadataRegistry's own
 plan.md pre-authorized (decision #9: *"Port, don't depend … extract a shared
 micro-package only if a third copy appears"* — it even sketched the name,
-"SwiftRankFusion"). RankKit is that package; any next consumer becomes the
+"SwiftRankFusion"). FoundationModelsRanker is that package; any next consumer becomes the
 third copy that rule anticipated, so we extract now rather than copy a third
 time.
 
@@ -67,7 +67,7 @@ reimplement the identical pipeline against their own snapshot type:
   FoundationModelsMultitool's Librarian (Multitool no longer contains any
   BM25/trigram/RRF code). But CodeContextKit *should* have it — `search code`
   currently stops at RRF fusion, and we want an agent-selection mode there
-  too. That makes CCK the second consumer, so the tier moves into RankKit
+  too. That makes CCK the second consumer, so the tier moves into FoundationModelsRanker
   rather than being copied a second time (§6 phase 3).
 
 ## 2. Goals / non-goals
@@ -79,13 +79,13 @@ reimplement the identical pipeline against their own snapshot type:
   by porting the existing tests from both repos.
 - The selection tier generalized behind narrow protocols, fronted by the
   one-call `Searcher` facade and a runnable example (§3a).
-- Neutral naming: nothing in RankKit may mention chunks, symbols, catalogs,
+- Neutral naming: nothing in FoundationModelsRanker may mention chunks, symbols, catalogs,
   or metadata.
 
 **Non-goals**
 - No new ranking *signals*, no persistence, no vector store.
 - **No changes to CodeContextKit or FoundationModelsMetadataRegistry from
-  this repo.** This plan builds RankKit; each consumer's migration onto it
+  this repo.** This plan builds FoundationModelsRanker; each consumer's migration onto it
   (and CodeContextKit's future agent-selection search mode) is a separate
   job, planned and executed in that repo. Their code is referenced here only
   as the *source* being ported and the behavioral reference the ported tests
@@ -97,10 +97,10 @@ reimplement the identical pipeline against their own snapshot type:
 ## 3. Package design
 
 ```
-RankKit/
+FoundationModelsRanker/
   Package.swift              swift-tools 6.1, platforms: [.macOS("27.0")]
   Sources/
-    RankKit/                 ← the one product
+    FoundationModelsRanker/                 ← the one product
       Searcher.swift          (phase 3 — the one-call facade, §3a)
       BM25.swift             (neutral field-weight names, §4)
       Trigram.swift
@@ -119,7 +119,7 @@ RankKit/
     FullMonty/               (phase 3 — §3a; runnable `swift run FullMonty`)
     FullMontyCore/           (library twin so smoke tests can drive it, FMR's pattern)
   Tests/
-    RankKitTests/            ported from both repos, verbatim (§5)
+    FoundationModelsRankerTests/            ported from both repos, verbatim (§5)
 ```
 
 - **One product, one target.** `FoundationModelsRouter` is a plain required
@@ -133,13 +133,13 @@ RankKit/
   this entire plan — nothing in `../CodeContextKit` or
   `../FoundationModelsMetadataRegistry` is modified, deleted, or touched.
 - Strip the "Ported from CodeContextKit's …" headers on the ported copies and
-  replace with a single attribution note (RankKit is now the canonical home;
+  replace with a single attribution note (FoundationModelsRanker is now the canonical home;
   lineage: Rust `swissarmyhammer-search` → CodeContextKit → here). Keep all
   doc comments otherwise, minus repo-specific references.
 
 ## 3a. The one-call interface (`Searcher`) — the package's front door
 
-RankKit is not just a parts bin: it ships a facade where "a list of things to
+FoundationModelsRanker is not just a parts bin: it ships a facade where "a list of things to
 search, then a query" is the whole API, and the full monty — BM25 + trigram +
 cosine fused by RRF, then agent final selection over the top candidates — is
 the *default* behavior, not an assembly project:
@@ -147,7 +147,7 @@ the *default* behavior, not an assembly project:
 ```swift
 import FoundationModels
 import FoundationModelsRouter
-import RankKit
+import FoundationModelsRanker
 
 // The things to search: an id and the text that describes it.
 let items = [
@@ -187,7 +187,7 @@ Design rules for the facade:
   `Searchable` protocol lets richer types participate without wrapping.
 - **The selection model is pluggable, never hardcoded.** `session:` is a
   factory `(String) -> any AgentSession` — the same seam FMR ships today.
-  RankKit retroactively conforms Apple's `LanguageModelSession` to
+  FoundationModelsRanker retroactively conforms Apple's `LanguageModelSession` to
   `AgentSession`, so a closure returning
   `LanguageModelSession(model:instructions:)` with `.fast`, `.default`, or
   any adapter-loaded model just works; Router users pass a
@@ -223,7 +223,7 @@ the example targets, never the library.
 ## 4. API reconciliations (the only deliberate diffs from today's code)
 
 1. **BM25 field-weight names** — the one real code divergence. Rename to
-   domain-neutral in RankKit:
+   domain-neutral in FoundationModelsRanker:
    - `BM25.primaryFieldWeight = 5.0` (CCK's `symbolPathFieldWeight`, FMR's
      `idFieldWeight`)
    - `BM25.bodyFieldWeight = 1.0` (CCK already uses this name; FMR calls it
@@ -235,7 +235,7 @@ the example targets, never the library.
    current `embed(_:)`; CCK's copy carries a stale label and is not the
    canonical source).
 4. **Access control** — everything ported stays `public` exactly as it is
-   today, so consumers can re-export (`@_exported import RankKit` or local
+   today, so consumers can re-export (`@_exported import FoundationModelsRanker` or local
    typealiases) during their own migrations without breaking their public
    APIs. How each does that is their migration's call, not this plan's.
 
@@ -262,7 +262,7 @@ become the no-behavior-change proof whenever they run their own migrations
 **Phase 1 — extract the identical files**
 1. Scaffold `Package.swift`, `README.md` stub, family CI workflow.
 2. Port (copy) the six core files + adapter per §3/§4; port tests per §5.
-3. `swift test` green; push `main` to `github.com/swissarmyhammer/RankKit`
+3. `swift test` green; push `main` to `github.com/swissarmyhammer/FoundationModelsRanker`
    so consumers can resolve the dependency whenever they migrate.
 
 **Phase 2 — unify the duplicated pipeline**
@@ -296,17 +296,17 @@ per-id item/block lookup, and summary rendering — so the generalization is:
   `capacityCharacterLimit`, `candidateLimit`), `Selection` (`@Generable` —
   brings the FoundationModels system framework import, fine at the macOS 27
   floor), `AgentSession`, and `idEnumGrammar(ids:)` (already uses Router's
-  `Grammar`, which RankKit links anyway).
+  `Grammar`, which FoundationModelsRanker links anyway).
 - Neutral diagnostics: a small `RankDiagnostic` enum for
   `.retrievalCut(considered:kept:)` / `.unknownSelectedId(id:)`; consumers
   map it into their own diagnostics or logging.
 - Everything selection-shaped keeps its semantics verbatim: under-budget
   cached-root + fork-per-call, over-budget retrieval top-M into a one-off
   session, ids-only grammar-constrained output, verbatim block lookup.
-- **Selection prompt: default in RankKit, override per consumer.** The
+- **Selection prompt: default in FoundationModelsRanker, override per consumer.** The
   prompt is `SelectionConfig.preamble` (the full prefix is preamble +
   `# Candidates` + each candidate's summary block, assembled in
-  `SelectionTier.assemblePrefix`). RankKit ships the default —
+  `SelectionTier.assemblePrefix`). FoundationModelsRanker ships the default —
   `String.selectionDefault`, the proven librarian guidance with neutral
   wording ("return ONLY the items needed — fewest that suffice, in call
   order when order matters; do not invent ids; return an empty list if
@@ -314,7 +314,7 @@ per-id item/block lookup, and summary rendering — so the generalization is:
   `preamble:` parameter, keeping their model-visible prompts under their
   own control.
 - Conform Apple's `LanguageModelSession` to `AgentSession` (retroactive
-  conformance in RankKit) so any FoundationModels model — `.fast`,
+  conformance in FoundationModelsRanker) so any FoundationModels model — `.fast`,
   `.default`, adapter-loaded — plugs into the selection seam without Router
   (§3a: the model is never hardcoded).
 - Build the `Searcher` facade (§3a) and the `Examples/FullMonty` targets —
@@ -326,20 +326,20 @@ per-id item/block lookup, and summary rendering — so the generalization is:
 
 ## 6a. Follow-on work — separate jobs, out of scope here
 
-Each of these gets planned and executed **in its own repo**, against RankKit
+Each of these gets planned and executed **in its own repo**, against FoundationModelsRanker
 `main`; this plan deliberately does not spec them:
 
-- **CodeContextKit**: migrate onto RankKit (drop its primitive copies, adopt
+- **CodeContextKit**: migrate onto FoundationModelsRanker (drop its primitive copies, adopt
   the shared types), and later add an agent-selection mode to `search code`
   over its RRF candidates.
-- **FoundationModelsMetadataRegistry**: migrate onto RankKit (drop its
+- **FoundationModelsMetadataRegistry**: migrate onto FoundationModelsRanker (drop its
   ported copies, adopt the shared tier, keep its librarian preamble and
   `MetadataDiagnostic` surface).
 - After those migrations: each repo verifies its own downstream dependents.
 
 ## 7. Risks (this repo)
 
-- **Remote `branch: "main"` dependency**: once consumers adopt RankKit, a
+- **Remote `branch: "main"` dependency**: once consumers adopt FoundationModelsRanker, a
   regression here breaks their CI. Same tradeoff the family already accepts
   for FoundationModelsRouter; the ported test suite is the guard — keep
   `main` green.
