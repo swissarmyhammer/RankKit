@@ -42,8 +42,8 @@ comments:
 
     Verification: `swift test` fresh run — 196 tests / 17 suites, 0 failures, exit 0 (same count as pre-refactor baseline; pure refactor, no test changes needed). really-done double-check agent verdict: PASS — independently confirmed behavior identity, ran swift test itself (196/17 green), confirmed `find duplicates` reports zero intra-file pairs in Searcher.swift (topMatches <-> fullOrdering no longer pair), no stale doc references (`forHits` grep empty), and diff scope is exactly Searcher.swift + this card's kanban bookkeeping. Not committed, not pushed, per instructions.
   timestamp: 2026-07-15T20:46:18.016679+00:00
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8e80'
 title: Attach real fused score/signals to under-budget selection matches
 ---
 ## What
