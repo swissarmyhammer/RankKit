@@ -197,11 +197,12 @@ public actor SelectionTier {
     /// Maps model-selected `ids` back through the catalog to verbatim
     /// `SelectionMatch`es (plan.md §6 "Verbatim lookup"), filtering any id
     /// not resolvable and reporting it via `.unknownSelectedId` —
-    /// structurally unreachable given the id-enum grammar's `uniqueItems` +
-    /// per-element enum constraint, but defended against anyway —
-    /// deduplicating repeats (first occurrence wins, keeping the model's own
-    /// call-order intent) without reporting a diagnostic for them, and
-    /// truncating to `limit`.
+    /// structurally unreachable given the id-enum grammar's per-element
+    /// enum constraint, but defended against anyway — deduplicating repeats
+    /// (structurally possible, since the xgrammar pipeline ignores
+    /// `uniqueItems` and `maxItems` only bounds the count; first occurrence
+    /// wins, keeping the model's own call-order intent) without reporting a
+    /// diagnostic for them, and truncating to `limit`.
     ///
     /// - Parameters:
     ///   - ids: the model-selected ids, in the order the model returned them.
@@ -290,7 +291,9 @@ public actor SelectionTier {
     /// schema in `Grammar.jsonSchema(_:)`), with an `enum` constraint
     /// injected into the `ids` array's `items` subschema so the model is
     /// structurally incapable of inventing an id outside the current
-    /// candidate set.
+    /// candidate set, and a `maxItems` cap of `ids.count` so it cannot emit
+    /// more ids than there are candidates (the enforcement backstop for
+    /// `uniqueItems`, which the xgrammar pipeline silently ignores).
     ///
     /// - Parameter ids: the candidate id set to constrain output to — the
     ///   full catalog's ids under budget, the top-M ranked ids over budget.
@@ -316,6 +319,13 @@ public actor SelectionTier {
         // `enum` constraint above to make the *set* of ids structurally
         // exact, not just each individual element's membership.
         idsSchema["uniqueItems"] = true
+        // Hard length cap -- the xgrammar pipeline enforces
+        // `minItems`/`maxItems` but silently ignores `uniqueItems`, so
+        // without this bound the compiled grammar permits an
+        // unbounded-length array of repeated enum members (observed as a
+        // ~6150-token runaway on an off-topic intent). A selection can
+        // never legitimately contain more ids than there are candidates.
+        idsSchema["maxItems"] = ids.count
         properties["ids"] = idsSchema
         root["properties"] = properties
 

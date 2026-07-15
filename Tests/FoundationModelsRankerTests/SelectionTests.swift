@@ -288,6 +288,30 @@ struct SelectionTests {
     }
 
     @Test
+    func idEnumGrammarBoundsIdsWithMaxItemsAtTheCandidateCount() throws {
+        // `maxItems` is what actually stops runaway generation: the xgrammar
+        // pipeline enforces `minItems`/`maxItems` but silently ignores
+        // `uniqueItems`, so without this bound the compiled grammar permits
+        // an unbounded-length array of repeated enum members -- observed as
+        // a 6150-token runaway on an off-topic query (task ^nkn73z2, porting
+        // the registry's ^678h0ex fix). A selection can never legitimately
+        // exceed the candidate count, so `ids.count` is the exact structural
+        // cap.
+        let grammar = try SelectionTier.idEnumGrammar(ids: Self.catalog.ids)
+
+        guard case .jsonSchema(let source) = grammar else {
+            Issue.record("expected a .jsonSchema grammar")
+            return
+        }
+        let data = try #require(source.data(using: .utf8))
+        let root = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let properties = try #require(root["properties"] as? [String: Any])
+        let idsSchema = try #require(properties["ids"] as? [String: Any])
+
+        #expect(idsSchema["maxItems"] as? Int == Self.catalog.ids.count)
+    }
+
+    @Test
     func idEnumGrammarReflectsAnEmptyCatalogAsAnEmptyEnum() throws {
         let grammar = try SelectionTier.idEnumGrammar(ids: [])
 
