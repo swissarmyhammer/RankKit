@@ -33,6 +33,15 @@ comments:
   id: 01kxkqre6vcywj1ncn0y45w6n7
   text: '/test verified independently: 196 tests / 17 suites, 0 failures, warm run and full clean rebuild both green. Only warning is the documented deliberate swift-jinja pin (family convention, also present in FoundationModelsMetadataRegistry). Proceeding to checkpoint /commit, then /review HEAD~1..HEAD.'
   timestamp: 2026-07-15T20:33:42.107312+00:00
+- actor: claude-code
+  id: 01kxkrfgd0nnmwf8s0f3x0y95s
+  text: |-
+    Review finding fixed (RetrievalEngine duplication in Searcher.swift). Pulled task review -> doing, refactored, flipped the finding to [x], left task in doing.
+
+    Refactor shape: extracted a private helper `rankedMatches(forQuery:rank:)` on RetrievalEngine parameterized by a `([Double]?) -> [Hit]` closure. The helper owns the shared pipeline once — empty-catalog guard, single `cosineScores(forQuery:)` await, and the Hit -> SelectionMatch mapping (the old single-caller `matches(forHits:)` was folded into it, so no vestigial helper remains). `topMatches` keeps only its own `limit > 0` short-circuit and binds `HybridRanker.topMatches(...limit:)`; `fullOrdering` binds `HybridRanker.fullOrdering(...)`. Behavior byte-identical: both short-circuits still return [] before awaiting cosineScores, so no .embeddingUnavailable is emitted from them; diagnostic emission otherwise unchanged.
+
+    Verification: `swift test` fresh run — 196 tests / 17 suites, 0 failures, exit 0 (same count as pre-refactor baseline; pure refactor, no test changes needed). really-done double-check agent verdict: PASS — independently confirmed behavior identity, ran swift test itself (196/17 green), confirmed `find duplicates` reports zero intra-file pairs in Searcher.swift (topMatches <-> fullOrdering no longer pair), no stale doc references (`forHits` grep empty), and diff scope is exactly Searcher.swift + this card's kanban bookkeeping. Not committed, not pushed, per instructions.
+  timestamp: 2026-07-15T20:46:18.016679+00:00
 position_column: doing
 position_ordinal: '80'
 title: Attach real fused score/signals to under-budget selection matches
@@ -63,3 +72,7 @@ Doc/comment updates required in the same change:
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-15 15:34)
+
+- [x] `Sources/FoundationModelsRanker/Searcher.swift:265` — topMatches and fullOrdering in RetrievalEngine are near-verbatim copies—both guard on documents.isEmpty, await cosineScores, call a HybridRanker method, and map results through matches(). Differ only in which HybridRanker method is called and whether limit is passed. Two blocks differing only by method name/arguments should be one parameterized function. Extract a private helper method parameterized by the HybridRanker closure (topMatches/fullOrdering), or refactor one to call the other with a bound method reference.

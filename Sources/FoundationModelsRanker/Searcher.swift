@@ -301,12 +301,12 @@ private struct RetrievalEngine: Sendable {
     ///   - limit: the maximum number of matches to return.
     /// - Returns: the fused, `[0, 1]`-normalized matches, best-first.
     func topMatches(query: String, limit: Int) async -> [SelectionMatch] {
-        guard limit > 0, !documents.isEmpty else { return [] }
-        let scores = await cosineScores(forQuery: query)
-        let hits = HybridRanker.topMatches(
-            ids: catalog.ids, documents: documents, query: query, cosineScores: scores, weights: weights, limit: limit
-        )
-        return matches(forHits: hits)
+        guard limit > 0 else { return [] }
+        return await rankedMatches(forQuery: query) { scores in
+            HybridRanker.topMatches(
+                ids: catalog.ids, documents: documents, query: query, cosineScores: scores, weights: weights, limit: limit
+            )
+        }
     }
 
     /// The selection tier's `retrievalRanking` source
@@ -320,23 +320,28 @@ private struct RetrievalEngine: Sendable {
     /// - Parameter query: the search intent.
     /// - Returns: exactly `catalog.ids.count` matches, best-first.
     func fullOrdering(query: String) async -> [SelectionMatch] {
-        guard !documents.isEmpty else { return [] }
-        let scores = await cosineScores(forQuery: query)
-        let hits = HybridRanker.fullOrdering(
-            ids: catalog.ids, documents: documents, query: query, cosineScores: scores, weights: weights
-        )
-        return matches(forHits: hits)
+        await rankedMatches(forQuery: query) { scores in
+            HybridRanker.fullOrdering(
+                ids: catalog.ids, documents: documents, query: query, cosineScores: scores, weights: weights
+            )
+        }
     }
 
-    /// Maps `hits` back through `catalog` to verbatim `SelectionMatch`es --
-    /// the shared tail of `topMatches` and `fullOrdering`, which otherwise
-    /// duplicate this identical `HybridRanker.Hit` -> `SelectionMatch`
-    /// translation.
+    /// The shared ranking pipeline of `topMatches` and `fullOrdering`, which
+    /// differ only in the `HybridRanker` call `rank` binds: short-circuit an
+    /// empty catalog, resolve the cosine signal once, rank, and map the hits
+    /// back through `catalog` to verbatim `SelectionMatch`es.
     ///
-    /// - Parameter hits: the ranker's hits, in whatever order they arrived.
-    /// - Returns: one `SelectionMatch` per hit, positionally aligned.
-    private func matches(forHits hits: [Hit]) -> [SelectionMatch] {
-        hits.map { hit in
+    /// - Parameters:
+    ///   - query: the search query to resolve cosine scores for.
+    ///   - rank: ranks the catalog given the resolved cosine scores (`nil`
+    ///     when the signal is skipped), in whatever order it decides.
+    /// - Returns: one `SelectionMatch` per hit, positionally aligned with
+    ///   `rank`'s result.
+    private func rankedMatches(forQuery query: String, rank: ([Double]?) -> [Hit]) async -> [SelectionMatch] {
+        guard !documents.isEmpty else { return [] }
+        let hits = rank(await cosineScores(forQuery: query))
+        return hits.map { hit in
             SelectionMatch(id: hit.id, block: catalog.block(forId: hit.id) ?? "", score: hit.score, signals: hit.signals)
         }
     }
