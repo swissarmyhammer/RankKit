@@ -26,19 +26,21 @@ import FoundationModelsRouter
 /// `search(intent:limit:)` `fork()`s a fresh child from it, so the prefix's
 /// KV cache is prefilled once and inherited per call — lifted from
 /// `Librarian.findAPIs(task:)`'s cached-root + fork-per-call mechanics.
+/// `retrievalRanking` then ranks the whole catalog once per call so every
+/// selected id carries its real fused `score`/`signals` (plan.md §3a); the
+/// whole catalog stays selectable, so no `.retrievalCut` is reported.
 ///
 /// **Over budget**: `retrievalRanking` ranks the whole catalog for the
 /// intent, and the top `config.candidateLimit` candidates (best-first) seed
 /// a **fresh, uncached, unforked one-off session** — there is no stable
 /// prefix to reuse, since the candidate set differs per intent. The cut is
 /// reported via `RankDiagnostic.retrievalCut(considered:kept:)` (the
-/// `onPrefilterCut` pattern, generalized to ranked retrieval). Unlike the
-/// under-budget path, retrieval genuinely ran, so returned `SelectionMatch`es
-/// carry its real fused `score`/`signals` instead of the pure-selection
-/// `1.0`/`nil`, and a selected id outside this round's candidates — even a
-/// legitimate id from elsewhere in the wider catalog — is filtered and
-/// reported via `.unknownSelectedId`, exactly like an id absent from the
-/// catalog altogether.
+/// `onPrefilterCut` pattern, generalized to ranked retrieval). Returned
+/// `SelectionMatch`es carry the same real fused `score`/`signals` as the
+/// under-budget path's, and a selected id outside this round's candidates —
+/// even a legitimate id from elsewhere in the wider catalog — is filtered
+/// and reported via `.unknownSelectedId`, exactly like an id absent from
+/// the catalog altogether.
 ///
 /// **Ids only, grammar-enforced** (plan.md §6, decision #4): the guided
 /// output is `Selection { ids: [String] }`; `idEnumGrammar(ids:)` derives the
@@ -69,8 +71,10 @@ public actor SelectionTier {
 
     /// Ranks the whole catalog for one intent, best-first, always returning
     /// exactly as many `SelectionMatch`es as the catalog has entries — the
-    /// over-budget path's source of top-M candidates. A consumer composing
-    /// this tier with FoundationModelsRanker's own `HybridRanker` wires this to
+    /// over-budget path's source of top-M candidates, and the under-budget
+    /// path's source of the real `score`/`signals` every selected id
+    /// carries. A consumer composing this tier with FoundationModelsRanker's
+    /// own `HybridRanker` wires this to
     /// `HybridRanker.fullOrdering(ids:documents:query:cosineScores:weights:)`
     /// mapped into `SelectionMatch`; tests script it directly.
     private let retrievalRanking: @Sendable (String) async -> [SelectionMatch]
@@ -87,7 +91,9 @@ public actor SelectionTier {
     ///   - config: this tier's session factory, preamble, and budgets.
     ///   - onDiagnostic: called for every diagnostic this tier emits.
     ///   - retrievalRanking: ranks the whole catalog for one intent,
-    ///     best-first — the over-budget path's source of top-M candidates.
+    ///     best-first — the over-budget path's source of top-M candidates,
+    ///     and the under-budget path's source of every selected id's real
+    ///     `score`/`signals`.
     public init(
         catalog: any SelectionCatalog,
         config: SelectionConfig,
@@ -106,16 +112,24 @@ public actor SelectionTier {
     /// Under budget: reuses (creating on first use) this tier's cached root
     /// session, seeded with the full assembled prefix, and `fork()`s a fresh
     /// child per call so the prefix's prefilled compute is inherited rather
-    /// than replayed. Over budget: ranks the whole catalog and seeds a
-    /// one-off session with the top-M candidates (`overBudgetSearch(intent:
-    /// limit:)`, plan.md §6) — no caching, no fork.
+    /// than replayed; `retrievalRanking` then ranks the whole catalog once
+    /// so every selected id carries its real fused `score`/`signals`. The
+    /// whole catalog stays selectable — no candidate cut happens, so no
+    /// `.retrievalCut` is reported. That enrichment costs one
+    /// `retrievalRanking` pass per call, which includes one query-embedding
+    /// call when the consumer's ranking uses an embedder. Over budget: ranks
+    /// the whole catalog and seeds a one-off session with the top-M
+    /// candidates (`overBudgetSearch(intent:limit:)`, plan.md §6) — no
+    /// caching, no fork.
     ///
     /// - Parameters:
     ///   - intent: the plain-language search intent.
     ///   - limit: the maximum number of matches to return. `limit <= 0`
-    ///     yields an empty result without forking or creating a session.
-    /// - Returns: the selected ids' verbatim `SelectionMatch`es, at most
-    ///   `limit`.
+    ///     yields an empty result without forking, creating a session, or
+    ///     ranking anything.
+    /// - Returns: the selected ids' verbatim `SelectionMatch`es, each
+    ///   carrying the real fused `score`/`signals` `retrievalRanking`
+    ///   reported for it, at most `limit`.
     /// - Throws: an error from `idEnumGrammar(ids:)` (not expected for
     ///   `Selection`'s fixed shape), or whatever the underlying session's
     ///   `fork()`/`respond(to:generating:)` throws.
@@ -127,7 +141,16 @@ public actor SelectionTier {
 
         let child = try await cachedRootSession().fork()
         let selection = try await child.respond(to: intent, generating: Selection.self)
-        return matches(forIds: selection.ids, limit: limit)
+        // Ranked after the model call, so a throwing session never pays the
+        // retrieval (and query-embedding) cost -- the full ordering resolves
+        // every catalog id, including the zero-scored tail, to its real
+        // fused score/signals.
+        let ranked = await retrievalRanking(intent)
+        return matches(
+            forIds: selection.ids,
+            limit: limit,
+            retrievalMatches: Dictionary(uniqueKeysWithValues: ranked.map { ($0.id, $0) })
+        )
     }
 
     /// Returns this tier's cached root session, creating and caching it on
@@ -213,16 +236,20 @@ public actor SelectionTier {
     ///     from the catalog. `nil` (the under-budget default) allows any
     ///     catalog id.
     ///   - retrievalMatches: the retrieval `SelectionMatch` (real fused
-    ///     `score` and `signals`) for each of this round's candidates, keyed
-    ///     by id — the over-budget path's ranking result. Empty (the
-    ///     under-budget default) yields the pure-selection `1.0`/`nil`.
+    ///     `score` and `signals`) for every resolvable id, keyed by id — the
+    ///     full-catalog ordering under budget, this round's candidates over
+    ///     budget. An id absent from it is treated exactly like an id absent
+    ///     from the catalog (structurally unreachable for both callers:
+    ///     `retrievalRanking` covers every catalog id, and the over-budget
+    ///     `allowedIds` are exactly its candidates' keys).
     /// - Returns: the verbatim `SelectionMatch`es for every known, allowed,
-    ///   first-seen id, at most `limit`.
+    ///   first-seen id, each carrying its retrieval `score`/`signals`, at
+    ///   most `limit`.
     private func matches(
         forIds ids: [String],
         limit: Int,
         allowedIds: Set<String>? = nil,
-        retrievalMatches: [String: SelectionMatch] = [:]
+        retrievalMatches: [String: SelectionMatch]
     ) -> [SelectionMatch] {
         var results: [SelectionMatch] = []
         results.reserveCapacity(min(ids.count, limit))
@@ -231,18 +258,18 @@ public actor SelectionTier {
             guard results.count < limit else { break }
             guard seenIds.insert(id).inserted else { continue }
             guard allowedIds?.contains(id) ?? true,
-                let block = catalog.block(forId: id)
+                let block = catalog.block(forId: id),
+                let retrievalMatch = retrievalMatches[id]
             else {
                 onDiagnostic(.unknownSelectedId(id: id))
                 continue
             }
-            let retrievalMatch = retrievalMatches[id]
             results.append(
                 SelectionMatch(
                     id: id,
                     block: block,
-                    score: retrievalMatch?.score ?? 1.0,
-                    signals: retrievalMatch?.signals
+                    score: retrievalMatch.score,
+                    signals: retrievalMatch.signals
                 )
             )
         }

@@ -276,7 +276,7 @@ struct OverBudgetTests {
     // MARK: - Retrieval-tier signals attach to over-budget results
 
     @Test
-    func overBudgetResultsCarryTheRealRetrievalScoreAndSignalsUnlikeUnderBudgetsPureSelection() async throws {
+    func overBudgetResultsCarryTheRealRetrievalScoreAndSignalsOfThisRoundsCandidates() async throws {
         let factory = RecordingSessionFactory(responses: [#"{"ids":["alpha"]}"#])
         let config = SelectionConfig(
             model: factory.makeSession,
@@ -294,9 +294,8 @@ struct OverBudgetTests {
 
         let alpha = try #require(matches.first)
         #expect(alpha.id == "alpha")
-        // Retrieval genuinely ran to rank "alpha" -- unlike the under-budget
-        // path's pure-selection `1.0`/`nil`, this carries the real fused
-        // score and per-signal breakdown.
+        // Retrieval genuinely ran to rank "alpha" -- the match carries the
+        // scripted ranking's real fused score and per-signal breakdown.
         #expect(alpha.score > 0.0)
         let signals = try #require(alpha.signals)
         #expect(signals.bm25 > 0.0)

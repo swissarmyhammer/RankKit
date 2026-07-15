@@ -90,7 +90,7 @@ public struct Searcher: Sendable {
 
     /// This facade's precomputed retrieval state and the knobs
     /// `search(_:limit:)`'s retrieval fallback and the selection tier's
-    /// over-budget candidate ranking both drive `HybridRanker` through.
+    /// per-search catalog ranking both drive `HybridRanker` through.
     private let engine: RetrievalEngine
 
     /// Which tier `search(_:limit:)` uses.
@@ -184,6 +184,13 @@ public struct Searcher: Sendable {
     /// Searches this facade's catalog for `query`, answering through
     /// whichever tier `mode` selects.
     ///
+    /// A selection-tier search (under or over budget) ranks the whole
+    /// catalog once per query to attach real scores to the picks — which
+    /// includes one query-embedding call when an `embedder:` is configured.
+    /// Without one, each selection search reports the same
+    /// `.embeddingUnavailable` degradation a retrieval search does (unless
+    /// `weights.cosine` is `0.0`, the documented opt-out).
+    ///
     /// - Parameters:
     ///   - query: the search query.
     ///   - limit: the maximum number of results to return. Defaults to
@@ -191,9 +198,9 @@ public struct Searcher: Sendable {
     ///     or crashing.
     /// - Returns: `.retrieval`'s fused, `[0, 1]`-normalized matches, each
     ///   carrying real per-signal `signals`; `.selection`'s verbatim
-    ///   matches (score `1.0`, `signals` `nil`, under budget; real fused
-    ///   score/signals, over budget); `.auto`'s resolution of whichever of
-    ///   those applies.
+    ///   matches, each carrying the same real fused score/signals the
+    ///   full-catalog retrieval ordering reports for the query (plan.md
+    ///   §3a); `.auto`'s resolution of whichever of those applies.
     /// - Throws: `SelectionTierUnavailable` when `mode == .selection` and no
     ///   session is configured (`session: nil`); otherwise whatever the
     ///   underlying selection session throws.
@@ -228,9 +235,9 @@ public struct SelectionTierUnavailable: Error, Sendable, Equatable {
 /// Bundles `Searcher`'s precomputed retrieval state (catalog, ranked
 /// documents, item embeddings) and knobs (`embedder`, `weights`,
 /// `onDiagnostic`) so both `search(_:limit:)`'s own retrieval fallback and
-/// the selection tier's over-budget `retrievalRanking` closure (captured at
-/// `init`, before `self` exists as a `Searcher`) drive the same
-/// `HybridRanker` calls without duplicating the wiring.
+/// the selection tier's `retrievalRanking` closure (captured at `init`,
+/// before `self` exists as a `Searcher`) drive the same `HybridRanker`
+/// calls without duplicating the wiring.
 private struct RetrievalEngine: Sendable {
     /// The catalog every id, summary, and block lookup resolves through.
     let catalog: ItemCatalog
@@ -302,11 +309,13 @@ private struct RetrievalEngine: Sendable {
         return matches(forHits: hits)
     }
 
-    /// The selection tier's over-budget candidate source
+    /// The selection tier's `retrievalRanking` source
     /// (`SelectionTier.init(catalog:config:onDiagnostic:retrievalRanking:)`):
     /// `HybridRanker.fullOrdering(...)`, mapped back through `catalog` to
     /// verbatim `SelectionMatch`es -- always exactly `catalog.ids.count`
-    /// long.
+    /// long. Over budget it supplies the top-M candidate cut; under budget
+    /// it supplies the real fused `score`/`signals` every selected id
+    /// carries.
     ///
     /// - Parameter query: the search intent.
     /// - Returns: exactly `catalog.ids.count` matches, best-first.

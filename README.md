@@ -24,7 +24,8 @@ let items = [
 // then an agent picks the final result on the on-device system model.
 let searcher = try await Searcher(items)
 let hits = try await searcher.search("how do I find TODO comments in my code")
-// hits[0].id == "grep" -- the agent's pick from the top candidates
+// hits[0].id == "grep" -- the agent's pick, carrying the real fused
+// .score and per-signal .signals retrieval reports for the query
 ```
 
 Any `LanguageModelSession` works — the model is never hardcoded. This is
@@ -68,10 +69,12 @@ let searcher = try await Searcher(
   session is ever consulted. Results carry the real fused `score` and
   per-signal `.signals`.
 - `.selection` — an agent picks from the top candidates; throws if no
-  `session:` is configured. A pick carries a fixed `score` of `1.0` and
-  `signals: nil` when the item list fits the selection budget; once it
-  doesn't, the one-off fallback seeds itself from the top retrieval
-  candidates and results carry their real fused `score`/`signals` instead.
+  `session:` is configured. Picks carry the real fused `score` and
+  per-signal `.signals` retrieval reports for the query: when the item
+  list fits the selection budget the whole catalog stays selectable and is
+  ranked once per search to attach those scores (one query-embedding call
+  when an `embedder:` is configured); once it doesn't fit, the one-off
+  fallback seeds itself from the top retrieval candidates.
 - `.auto` — selection when a session is configured, retrieval otherwise
   (the lead example's zero-config call resolves here).
 

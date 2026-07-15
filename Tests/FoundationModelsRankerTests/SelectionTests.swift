@@ -29,10 +29,42 @@ struct SelectionTests {
         .init(id: "rollback", block: "reverts the last release"),
     ])
 
-    /// An under-budget config's `retrievalRanking` is never invoked, so an
-    /// empty stub proves the point if it ever is.
+    /// Scripted full-catalog ranking for `Self.catalog`, standing in for a
+    /// real retrieval tier's `HybridRanker.fullOrdering`-shaped output: one
+    /// entry per catalog id with a distinct fused score and per-signal
+    /// breakdown, so tests can assert that under-budget selections carry
+    /// exactly these values instead of a fixed sentinel.
+    static let rankedCatalog = [
+        SelectionMatch(
+            id: "deploy",
+            block: "ships containers to a kubernetes cluster",
+            score: 0.9,
+            signals: Signals(bm25: 4.2, trigram: 0.6, cosine: 0.0)
+        ),
+        SelectionMatch(
+            id: "rollback",
+            block: "reverts the last release",
+            score: 0.3,
+            signals: Signals(bm25: 1.1, trigram: 0.2, cosine: 0.0)
+        ),
+    ]
+
+    /// `rankedCatalog` as the `retrievalRanking` closure a tier under test
+    /// is constructed with.
+    static func rankEntireCatalog(intent: String) async -> [SelectionMatch] {
+        rankedCatalog
+    }
+
+    /// `rankedCatalog`'s entry for `id` -- the expected `score`/`signals`
+    /// source for assertions.
+    static func rankedMatch(_ id: String) -> SelectionMatch? {
+        rankedCatalog.first { $0.id == id }
+    }
+
+    /// A `limit <= 0` search short-circuits before ranking anything, so a
+    /// stub that records an `Issue` proves the point if it ever runs.
     private static func neverCalledRetrievalRanking(_ intent: String) async -> [SelectionMatch] {
-        Issue.record("retrievalRanking should not run under budget")
+        Issue.record("retrievalRanking should not run when the search short-circuits")
         return []
     }
 
@@ -53,7 +85,7 @@ struct SelectionTests {
             catalog: Self.catalog,
             config: config,
             onDiagnostic: { _ in },
-            retrievalRanking: Self.neverCalledRetrievalRanking
+            retrievalRanking: Self.rankEntireCatalog
         )
 
         let first = try await tier.search(intent: "first task", limit: 5)
@@ -74,13 +106,19 @@ struct SelectionTests {
         let catalog = FixtureSelectionCatalog([
             .init(id: "deploy", block: "the full, long rendered block text", summary: "short summary")
         ])
+        let ranked = SelectionMatch(
+            id: "deploy",
+            block: "the full, long rendered block text",
+            score: 0.7,
+            signals: Signals(bm25: 2.0, trigram: 0.1, cosine: 0.0)
+        )
         let factory = RecordingSessionFactory(responses: [#"{"ids":["deploy"]}"#])
         let config = SelectionConfig(model: factory.makeSession)
         let tier = SelectionTier(
             catalog: catalog,
             config: config,
             onDiagnostic: { _ in },
-            retrievalRanking: Self.neverCalledRetrievalRanking
+            retrievalRanking: { _ in [ranked] }
         )
 
         let matches = try await tier.search(intent: "task", limit: 5)
@@ -91,8 +129,9 @@ struct SelectionTests {
 
         let match = try #require(matches.first)
         #expect(match.block == "the full, long rendered block text")
-        #expect(match.score == 1.0)
-        #expect(match.signals == nil)
+        // The ranking's real fused score/signals attach even under budget.
+        #expect(match.score == ranked.score)
+        #expect(match.signals == ranked.signals)
     }
 
     // MARK: - Ids-only decode + verbatim lookup identity
@@ -105,14 +144,19 @@ struct SelectionTests {
             catalog: Self.catalog,
             config: config,
             onDiagnostic: { _ in },
-            retrievalRanking: Self.neverCalledRetrievalRanking
+            retrievalRanking: Self.rankEntireCatalog
         )
 
         let matches = try await tier.search(intent: "roll back the last deploy", limit: 5)
 
         #expect(matches.map(\.id) == ["rollback", "deploy"])
         #expect(matches.map(\.block) == ["reverts the last release", "ships containers to a kubernetes cluster"])
-        #expect(matches.allSatisfy { $0.score == 1.0 && $0.signals == nil })
+        // Every match carries the fixture ranking's real fused score and
+        // per-signal breakdown, in the model's own call order -- never a
+        // fixed sentinel.
+        let expected = ["rollback", "deploy"].compactMap(Self.rankedMatch)
+        #expect(matches.map(\.score) == expected.map(\.score))
+        #expect(matches.map(\.signals) == expected.map(\.signals))
     }
 
     @Test
@@ -123,7 +167,7 @@ struct SelectionTests {
             catalog: Self.catalog,
             config: config,
             onDiagnostic: { _ in },
-            retrievalRanking: Self.neverCalledRetrievalRanking
+            retrievalRanking: Self.rankEntireCatalog
         )
 
         let matches = try await tier.search(intent: "roll back the last deploy", limit: 1)
@@ -142,7 +186,7 @@ struct SelectionTests {
             catalog: Self.catalog,
             config: config,
             onDiagnostic: { recorder.record($0) },
-            retrievalRanking: Self.neverCalledRetrievalRanking
+            retrievalRanking: Self.rankEntireCatalog
         )
 
         let matches = try await tier.search(intent: "task", limit: 5)
@@ -163,7 +207,7 @@ struct SelectionTests {
             catalog: Self.catalog,
             config: config,
             onDiagnostic: { _ in },
-            retrievalRanking: Self.neverCalledRetrievalRanking
+            retrievalRanking: Self.rankEntireCatalog
         )
 
         let matches = try await tier.search(intent: "task", limit: 2)
@@ -182,7 +226,7 @@ struct SelectionTests {
             catalog: Self.catalog,
             config: config,
             onDiagnostic: { recorder.record($0) },
-            retrievalRanking: Self.neverCalledRetrievalRanking
+            retrievalRanking: Self.rankEntireCatalog
         )
 
         let matches = try await tier.search(intent: "nothing matches this", limit: 5)
@@ -201,7 +245,9 @@ struct SelectionTests {
             catalog: FixtureSelectionCatalog([]),
             config: config,
             onDiagnostic: { _ in },
-            retrievalRanking: Self.neverCalledRetrievalRanking
+            // An empty catalog's full ordering is empty, matching
+            // `HybridRanker.fullOrdering`'s exactly-catalog-sized contract.
+            retrievalRanking: { _ in [] }
         )
 
         let matches = try await tier.search(intent: "anything", limit: 5)
@@ -220,7 +266,7 @@ struct SelectionTests {
             catalog: Self.catalog,
             config: config,
             onDiagnostic: { recorder.record($0) },
-            retrievalRanking: Self.neverCalledRetrievalRanking
+            retrievalRanking: Self.rankEntireCatalog
         )
 
         let matches = try await tier.search(intent: "task", limit: 5)
@@ -339,7 +385,7 @@ struct SelectionTests {
             catalog: Self.catalog,
             config: config,
             onDiagnostic: { _ in },
-            retrievalRanking: Self.neverCalledRetrievalRanking
+            retrievalRanking: Self.rankEntireCatalog
         )
 
         _ = try await tier.search(intent: "task", limit: 5)

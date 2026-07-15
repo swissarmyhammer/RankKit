@@ -30,12 +30,14 @@ struct ReadmeExampleTests {
     /// A session is configured and `mode` is left at its `.auto` default
     /// (as the README's own call does), so this resolves to `.selection`;
     /// this three-item list stays comfortably under
-    /// `SelectionConfig.defaultCapacityCharacterLimit`, so it's a pure,
-    /// under-budget pick -- `score == 1.0`, `signals == nil` (the same
-    /// sentinel `SearcherTests
-    /// .selectionModeUnderBudgetUsesTheConfiguredSessionAndReturnsPureSelectionMatches`
-    /// pins), not a fused retrieval ranking. Pinned here so the README's
-    /// "Modes" section, which documents this exact shape, can't drift.
+    /// `SelectionConfig.defaultCapacityCharacterLimit`, so it's an
+    /// under-budget pick that carries the real fused `score` and per-signal
+    /// `signals` retrieval reports for the query (the same behavior
+    /// `SearcherTests
+    /// .selectionModeUnderBudgetUsesTheConfiguredSessionAndAttachesRealRetrievalScoreAndSignals`
+    /// pins), matching plan.md §3a's ".score and per-signal .signals
+    /// attached" promise. Pinned here so the README's "Modes" section,
+    /// which documents this exact shape, can't drift.
     @Test("The lead example's SearchItem list and Searcher(items).search(...) call find grep first")
     func leadExampleFindsGrepForATodoCommentsQuery() async throws {
         let items = SearcherTests.toolItems
@@ -46,8 +48,14 @@ struct ReadmeExampleTests {
 
         let first = try #require(hits.first)
         #expect(first.id == "grep")
-        #expect(first.score == 1.0)
-        #expect(first.signals == nil)
+        // The pick carries the same real fused score and per-signal
+        // breakdown `.retrieval` mode reports for it -- never a fixed
+        // sentinel.
+        let retrievalSearcher = try await Searcher(items, session: nil, mode: .retrieval)
+        let retrievalHits = try await retrievalSearcher.search("how do I find TODO comments in my code")
+        let expected = try #require(retrievalHits.first { $0.id == "grep" })
+        #expect(first.score == expected.score)
+        #expect(first.signals == expected.signals)
     }
 
     /// README's explicit session override -- "any `LanguageModelSession`

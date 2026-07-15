@@ -9,8 +9,8 @@
 // they need the original item back.
 
 /// One retrieval or selection result over a `SelectionCatalog` (plan.md §6):
-/// the catalog's own id and verbatim block, plus the fused score and (when
-/// retrieval ran) the raw per-signal scores that produced it.
+/// the catalog's own id and verbatim block, plus the fused score and the raw
+/// per-signal scores that produced it.
 public struct SelectionMatch: Sendable, Equatable {
     /// The matched id.
     public let id: String
@@ -20,12 +20,13 @@ public struct SelectionMatch: Sendable, Equatable {
     /// model output (plan.md §1 "Verbatim by construction, not by prompt").
     public let block: String
 
-    /// The fused score, normalized to `[0, 1]` -- `1.0` for a pure-selection
-    /// result (no ranked retrieval ran).
+    /// The fused score, normalized to `[0, 1]` -- `0.0` for an id every
+    /// retrieval signal missed (the zero-scored tail of a full-catalog
+    /// ordering).
     public let score: Double
 
-    /// The raw per-signal scores that produced `score`, or `nil` in
-    /// pure-selection mode (no retrieval signals to report).
+    /// The raw per-signal scores that produced `score`, or `nil` when no
+    /// per-signal breakdown accompanies the match.
     public let signals: Signals?
 
     /// Creates one retrieval or selection result.
@@ -34,8 +35,8 @@ public struct SelectionMatch: Sendable, Equatable {
     ///   - id: the matched id.
     ///   - block: the matched id's block, verbatim from the catalog.
     ///   - score: the fused score, in `[0, 1]`.
-    ///   - signals: the raw per-signal scores, or `nil` in pure-selection
-    ///     mode.
+    ///   - signals: the raw per-signal scores, or `nil` when no per-signal
+    ///     breakdown accompanies the match.
     public init(id: String, block: String, score: Double, signals: Signals?) {
         self.id = id
         self.block = block

@@ -74,7 +74,7 @@ struct SearcherTests {
     // MARK: - `.selection` mode, under budget: cached root + fork-per-call
 
     @Test
-    func selectionModeUnderBudgetUsesTheConfiguredSessionAndReturnsPureSelectionMatches() async throws {
+    func selectionModeUnderBudgetUsesTheConfiguredSessionAndAttachesRealRetrievalScoreAndSignals() async throws {
         let root = RootSessionRespondCalledDirectlySession(forkResponses: [#"{"ids":["glob"]}"#])
         let factoryCallCount = CallCounter()
         let searcher = try await Searcher(
@@ -90,13 +90,37 @@ struct SearcherTests {
 
         #expect(matches.map(\.id) == ["glob"])
         #expect(matches.first?.block == "Find files by name pattern, sorted by mtime")
-        // Pure selection (no retrieval ranking under budget): score is the
-        // fixed 1.0 sentinel, no per-signal breakdown.
-        #expect(matches.first?.score == 1.0)
-        #expect(matches.first?.signals == nil)
+        // Under budget the whole catalog is ranked once per query, so the
+        // pick carries the same real fused score and per-signal breakdown
+        // `.retrieval` mode reports for it -- never a fixed sentinel.
+        let retrievalSearcher = try await Searcher(Self.toolItems, session: nil, mode: .retrieval)
+        let retrievalMatches = try await retrievalSearcher.search("find files by name", limit: 5)
+        let expected = try #require(retrievalMatches.first { $0.id == "glob" })
+        #expect(matches.first?.score == expected.score)
+        #expect(matches.first?.signals == expected.signals)
         // Cached-root + fork-per-call: the session factory ran exactly once.
         #expect(factoryCallCount.count == 1)
         #expect(root.forkCount == 1)
+    }
+
+    @Test
+    func selectionModeUnderBudgetAttachesTheZeroScoredTailEntrysRealScoreAndSignals() async throws {
+        // "qqqq" shares no token and no trigram with any item, so the full
+        // retrieval ordering puts every id in the zero-scored tail -- yet the
+        // whole catalog stays selectable under budget. The scripted pick
+        // must carry that tail entry's real (zero) score and all-zero
+        // signals, not the old 1.0/nil pure-selection sentinel.
+        let searcher = try await Searcher(
+            Self.toolItems,
+            session: { _ in ScriptedAgentSession([#"{"ids":["watch"]}"#]) },
+            mode: .selection
+        )
+
+        let matches = try await searcher.search("qqqq", limit: 5)
+
+        #expect(matches.map(\.id) == ["watch"])
+        #expect(matches.first?.score == 0.0)
+        #expect(matches.first?.signals == Signals(bm25: 0.0, trigram: 0.0, cosine: 0.0))
     }
 
     @Test
@@ -141,8 +165,8 @@ struct SearcherTests {
 
         #expect(matches.map(\.id) == ["alpha"])
         // Retrieval genuinely ran to rank "alpha" first -- the over-budget
-        // path's results carry real fused score/signals, unlike the
-        // under-budget path's pure-selection 1.0/nil sentinel.
+        // path's results carry the real fused score/signals of this round's
+        // top candidates.
         #expect(matches.first?.score ?? 0.0 > 0.0)
         #expect(matches.first?.signals != nil)
         // One-off session per call: calling search() twice re-invokes the
@@ -202,8 +226,14 @@ struct SearcherTests {
         let matches = try await searcher.search("search file contents with a regular expression", limit: 5)
 
         #expect(matches.map(\.id) == ["watch"])
-        #expect(matches.first?.score == 1.0)
-        #expect(matches.first?.signals == nil)
+        // The under-budget pick carries the same real fused score and
+        // per-signal breakdown `.retrieval` mode reports for "watch" on this
+        // query -- never a fixed sentinel.
+        let retrievalSearcher = try await Searcher(Self.toolItems, session: nil, mode: .retrieval)
+        let retrievalMatches = try await retrievalSearcher.search("search file contents with a regular expression", limit: 5)
+        let expected = try #require(retrievalMatches.first { $0.id == "watch" })
+        #expect(matches.first?.score == expected.score)
+        #expect(matches.first?.signals == expected.signals)
     }
 
     @Test
@@ -214,9 +244,9 @@ struct SearcherTests {
 
         let first = try #require(matches.first)
         #expect(first.id == "grep")
-        // Retrieval's real fused score/signals, not selection's 1.0/nil
-        // sentinel -- proves `.auto` actually fell back rather than
-        // silently returning nothing.
+        // Retrieval's fused ranking put the lexically closest item first --
+        // proves `.auto` actually fell back rather than silently returning
+        // nothing.
         #expect(first.score > 0.0)
         #expect(first.signals != nil)
     }
@@ -238,6 +268,26 @@ struct SearcherTests {
 
         #expect(matches.first?.id == "grep")
         #expect(matches.first?.signals?.cosine == 0.0)
+        #expect(recorder.diagnostics.contains(.embeddingUnavailable))
+    }
+
+    @Test
+    func selectionModeUnderBudgetWithNoEmbedderReportsEmbeddingUnavailable() async throws {
+        // The per-search ranking that attaches real score/signals to
+        // under-budget picks wants the cosine signal (default weights) but
+        // has no embedder -- every selection search now reports the same
+        // `.embeddingUnavailable` degradation a retrieval search does.
+        let recorder = DiagnosticRecorder()
+        let searcher = try await Searcher(
+            Self.toolItems,
+            embedder: nil,
+            session: { _ in ScriptedAgentSession([#"{"ids":["glob"]}"#]) },
+            mode: .selection,
+            onDiagnostic: { recorder.record($0) }
+        )
+
+        _ = try await searcher.search("find files by name", limit: 5)
+
         #expect(recorder.diagnostics.contains(.embeddingUnavailable))
     }
 
