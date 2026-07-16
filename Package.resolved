@@ -1,5 +1,5 @@
 {
-  "originHash" : "c22ce9daf881229bd22b7c7245b8e4d406ce63812aafb20e4efa7fefdbb248ce",
+  "originHash" : "f8a7304b48ee8f765c290933388bbc32e4a34083cb61736a8556a58b2da20ac2",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -16,7 +16,7 @@
       "location" : "https://github.com/swissarmyhammer/FoundationModelsRouter",
       "state" : {
         "branch" : "main",
-        "revision" : "a3d8c04e4a7598d9c261d818ef891cfffd51bcc9"
+        "revision" : "3d3c2e99356e8bba41f01a1dd7a9b2868cdaaa7d"
       }
     },
     {
@@ -34,7 +34,7 @@
       "location" : "https://github.com/swissarmyhammer/mlx-swift-lm",
       "state" : {
         "branch" : "foundationmodels-fixes",
-        "revision" : "433052884a4b8745a368be16b7cc29c270c1e3b5"
+        "revision" : "cc1728a4aba57fdad44f0e791a2c505dc6459c7f"
       }
     },
     {
@@ -105,8 +105,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-nio.git",
       "state" : {
-        "revision" : "cd3e1152083706d77b223fb29110e590efcc70c0",
-        "version" : "2.101.2"
+        "revision" : "0b18836bd8b0162e7e17a995a3fbee20ed8f3b2b",
+        "version" : "2.101.3"
       }
     },
     {
