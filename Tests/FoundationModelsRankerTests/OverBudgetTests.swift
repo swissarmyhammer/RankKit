@@ -247,7 +247,7 @@ struct OverBudgetTests {
     // MARK: - Candidate-set-only verbatim lookup (one-off grammar id set)
 
     @Test
-    func idOutsideTopMCandidatesIsFilteredAndReportedAsUnknownEvenThoughItIsAValidCatalogId() async throws {
+    func idOutsideTopMCandidatesIsFilteredAndReportedAsUnknownEvenThoughItIsAValidCatalogID() async throws {
         let recorder = DiagnosticRecorder()
         // "charlie" is a real catalog id, but `candidateLimit: 2` excludes
         // it from this round's candidates (alpha, bravo only) -- the
@@ -344,7 +344,7 @@ struct OverBudgetTests {
     // this round's candidates (review finding, 2026-07-13)
 
     @Test
-    func overBudgetSessionIsConstrainedToOnlyTheTopMCandidatesIdEnumGrammarNotTheWholeCatalog() async throws {
+    func overBudgetSessionIsConstrainedToOnlyTheTopMCandidatesIDEnumGrammarNotTheWholeCatalog() async throws {
         let factory = RecordingSessionFactory(responses: [#"{"ids":["alpha"]}"#])
         let config = SelectionConfig(
             model: factory.makeSession,
@@ -363,7 +363,7 @@ struct OverBudgetTests {
         // `candidateLimit: 2` keeps only "alpha"/"bravo" this round (see
         // `rankEntireCatalog`'s catalog-order tail) -- the session's grammar
         // must be scoped to exactly those two, not the whole five-id
-        // catalog, matching the `allowedIds` filtering `matches(forIds:)`
+        // catalog, matching the `allowedIDs` filtering `matches(forIDs:)`
         // already applies downstream. Compared structurally, not via
         // `Grammar`'s raw-string `Equatable`: `JSONSerialization.data(
         // withJSONObject:)` doesn't guarantee stable key order across

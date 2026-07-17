@@ -132,12 +132,12 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
         }
     }
 
-    /// Removes `ids`' rows from this corpus. Ids that aren't live are
+    /// Removes `ids`' rows from this corpus. IDs that aren't live are
     /// ignored.
     ///
-    /// - Parameter removedIds: the ids to evict.
-    public mutating func remove(ids removedIds: [String]) {
-        evict(ids: Set(removedIds))
+    /// - Parameter removedIDs: the ids to evict.
+    public mutating func remove(ids removedIDs: [String]) {
+        evict(ids: Set(removedIDs))
     }
 
     /// Removes every row in `group` -- the cohort eviction a streaming
@@ -152,28 +152,28 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
         evict(ids: Set(ids.filter { rows[$0]?.group == group }))
     }
 
-    /// Drops `removedIds`' rows, compacting `ids` and `documents` together
+    /// Drops `removedIDs`' rows, compacting `ids` and `documents` together
     /// in one pass so they stay positionally aligned -- the single removal
     /// path both `remove(ids:)` and `remove(group:)` resolve to, differing
     /// only in how they choose the set.
     ///
-    /// - Parameter removedIds: the ids to drop. Ids that aren't live are
+    /// - Parameter removedIDs: the ids to drop. IDs that aren't live are
     ///   ignored.
-    private mutating func evict(ids removedIds: Set<String>) {
-        guard !removedIds.isEmpty else { return }
+    private mutating func evict(ids removedIDs: Set<String>) {
+        guard !removedIDs.isEmpty else { return }
 
-        var survivingIds: [String] = []
+        var survivingIDs: [String] = []
         var survivingDocuments: [RankedDocument] = []
-        survivingIds.reserveCapacity(ids.count)
+        survivingIDs.reserveCapacity(ids.count)
         survivingDocuments.reserveCapacity(documents.count)
-        for (index, id) in ids.enumerated() where !removedIds.contains(id) {
-            survivingIds.append(id)
+        for (index, id) in ids.enumerated() where !removedIDs.contains(id) {
+            survivingIDs.append(id)
             survivingDocuments.append(documents[index])
         }
 
-        ids = survivingIds
+        ids = survivingIDs
         documents = survivingDocuments
-        for id in removedIds {
+        for id in removedIDs {
             rows[id] = nil
         }
     }

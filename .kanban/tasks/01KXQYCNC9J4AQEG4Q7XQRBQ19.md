@@ -98,6 +98,30 @@ comments:
 
     Out of scope and deliberately untouched: the known "same pass"/three-passes BM25 prose inaccuracy.
   timestamp: 2026-07-17T13:59:02.513622+00:00
+- actor: claude-code
+  id: 01kxr9nqyxfj1fqa5west7nqy6
+  text: |-
+    Pass-3 findings worked (resumed after a transient API 529 mid-run; picked up from disk state, no double-application). Both 09:19 findings now `- [x]`. `swift test`: 210 tests in 18 suites passed, exit 0 — matches baseline. Left green in `doing`, uncommitted, not moved to `review`. Did NOT run `swift format` (known dead end); verified 0 tabs / 0 two-space-indent lines in every edited file.
+
+    ROOT-CAUSE SWEEP of the interior-acronym `Id`/`Ids` -> `ID`/`IDs` family, confined to files this card already touched:
+
+    SelectionTier.swift (the root file): `matches(forIds:allowedIds:)` -> `matches(forIDs:allowedIDs:)` (the two cited findings), plus the whole file: bindings `candidateIds`->`candidateIDs`, `seenIds`->`seenIDs`; the `matches` doc block's `- allowedIds`/`allowedIds` prose; and two doc-prose "Ids only, grammar-enforced" -> "IDs only". Verified plan.md contains NO "Ids only"/"grammar-enforced" text, so that parenthetical was never a literal quote — changing it falsifies nothing.
+
+    SearchCorpus.swift: binding `removedIds`->`removedIDs`, `survivingIds`->`survivingIDs`, and prose "Ids that aren't live"->"IDs". Kept the public label `ids` on `remove(ids:)` — a LEADING acronym in lowerCamelCase is correctly lowercase (same rule, other branch; matches repo precedent `idEnumGrammar(ids:)`, `Selection.ids`); only the internal binding changed, zero caller impact.
+
+    SearchCorpusTests.swift: 4 test names (`...PresentId`, `removingIds...`, `...UnknownId`, `aRemovedId...`) -> ID/IDs.
+    OverBudgetTests.swift: the doc/comment reference `allowedIds`/`matches(forIds:)` -> `allowedIDs`/`matches(forIDs:)`, PLUS two test names the adversarial double-check caught that I'd initially missed (`...IsAValidCatalogId` -> `...ID`, `...IdEnumGrammar...` -> `...IDEnumGrammar...`). These are `@Test` funcs, no callers, file-local.
+
+    SearchItem.swift, BM25.swift, Searcher.swift, SelectionCatalog.swift, SelectionMatch.swift: scanned, already clean — nothing to change.
+
+    BLAST RADIUS: `matches(...)` is private to SelectionTier.swift -> file-local; grep confirms repo-wide `forIds|allowedIds|seenIds|candidateIds|removedIds|survivingIds` now returns ZERO hits. A scoped re-scan of all touched files for `Ids|[a-z]Id\b|Id[A-Z]|\bId\b` (excluding `.unknownSelectedId`/`enumIds`) returns ZERO recurrences.
+
+    DELIBERATELY NOT renamed (would be scope creep / breakage):
+    - `.unknownSelectedId` (RankDiagnostic enum case) — DECLARED in Selection/RankDiagnostic.swift, which this card never touched and is not in the sweep list. Its mentions in SelectionTier.swift are references to the real symbol; renaming locally would not compile. The mixed Id/ID spelling this leaves needs its own card (would also touch RankDiagnostic.swift + SelectionCoreTests/SelectionTests/OverBudgetTests assertions).
+    - `GrammarTestSupport.enumIds` — declared in Support/GrammarTestSupport.swift, not in scope.
+
+    Adversarial double-check verdict handling: returned REVISE with two findings. Finding 1 (the two OverBudgetTests names) FIXED. Finding 2 (13 further recurrences in SelectionTests.swift + SelectionCoreTests.swift, which are in the card's full commit delta but NOT in the working-tree diff and NOT in the coordinator's explicit sweep list) — PROCEEDING PER LOGGED JUSTIFICATION: the resume instruction re-confirmed scope as "ONLY the files this card already touches (SelectionTier, SearchCorpus, SearchItem, BM25, Searcher, SelectionCatalog, SelectionMatch, SearchCorpusTests, and the OverBudgetTests test names)". SelectionTests.swift and SelectionCoreTests.swift are not on that list and are not in the working-tree delta a re-review sees. Extending to them would be the scope creep the instruction forbids. Flagging for a potential follow-up card if the family wants those two swept too.
+  timestamp: 2026-07-17T15:03:45.885980+00:00
 position_column: doing
 position_ordinal: '80'
 title: 'Streaming corpus: additive add/remove with incremental BM25 globals'
@@ -140,3 +164,8 @@ Storage stays out of scope: the Ranker remains storage-free (in-memory precomput
 - [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:130` — Parameter documentation uses the external label `ids` instead of the parameter binding name `removedIds` — rule requires 'Parameter name:', matching how the parameter is used inside the function. Change '- Parameter ids:' to '- Parameter removedIds:' in the remove(ids:) documentation block.
 - [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:155` — Parameter label `forId` should be `forID` — the acronym ID is interior to the lowerCamelCase name and must be uniformly all-uppercase per the examples: `entryID`, `generatedTokenIDs`. Change parameter label to `forID`: `public func summaryBlock(forID id: String)`.
 - [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:161` — Parameter documentation uses the label `forId` but should use the parameter binding name `id` (same violation as line 153). Change '- Parameter forId:' to '- Parameter id:' in the block documentation block.
+
+## Review Findings (2026-07-17 09:19)
+
+- [x] `Sources/FoundationModelsRanker/Selection/SelectionTier.swift:140` — Parameter label `forIds` contains the interior acronym `Ids` in a lowerCamelCase context; acronyms must be uniformly uppercase. Rename the parameter label from `forIds` to `forIDs`: `forIDs ids: [String]`.
+- [x] `Sources/FoundationModelsRanker/Selection/SelectionTier.swift:142` — Parameter label `allowedIds` contains the interior acronym `Ids` in a lowerCamelCase context; should be uniformly uppercase. Rename the parameter label from `allowedIds` to `allowedIDs`: `allowedIDs: Set<String>? = nil`.

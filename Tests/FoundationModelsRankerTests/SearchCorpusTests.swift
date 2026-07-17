@@ -98,7 +98,7 @@ struct SearchCorpusTests {
     }
 
     @Test
-    func addingAnAlreadyPresentIdKeepsTheFirstOccurrence() {
+    func addingAnAlreadyPresentIDKeepsTheFirstOccurrence() {
         var corpus = SearchCorpus(items: Self.runAItems)
         corpus.add(items: [SearchItem(id: "a1", text: "completely different replacement text")])
 
@@ -180,7 +180,7 @@ struct SearchCorpusTests {
     // MARK: - Removal
 
     @Test
-    func removingIdsDropsThemFromEveryLookupAndFromRanking() {
+    func removingIDsDropsThemFromEveryLookupAndFromRanking() {
         var corpus = SearchCorpus(items: Self.allItems)
         corpus.remove(ids: ["a1", "b2"])
 
@@ -195,7 +195,7 @@ struct SearchCorpusTests {
     }
 
     @Test
-    func removingAnUnknownIdIsANoOp() {
+    func removingAnUnknownIDIsANoOp() {
         var corpus = SearchCorpus(items: Self.runAItems)
         corpus.remove(ids: ["nope"])
 
@@ -204,7 +204,7 @@ struct SearchCorpusTests {
     }
 
     @Test
-    func aRemovedIdCanBeAddedBackAfterwards() {
+    func aRemovedIDCanBeAddedBackAfterwards() {
         var corpus = SearchCorpus(items: Self.runAItems)
         corpus.remove(ids: ["a1"])
         corpus.add(items: [SearchItem(id: "a1", text: "a fresh row under a recycled id", group: "run-a")])

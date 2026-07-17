@@ -42,7 +42,7 @@ import FoundationModelsRouter
 /// and reported via `.unknownSelectedId`, exactly like an id absent from
 /// the catalog altogether.
 ///
-/// **Ids only, grammar-enforced** (plan.md §6, decision #4): the guided
+/// **IDs only, grammar-enforced** (plan.md §6, decision #4): the guided
 /// output is `Selection { ids: [String] }`; `idEnumGrammar(ids:)` derives the
 /// xgrammar JSON Schema constraining `ids` to the current candidate id
 /// set — the full catalog under budget, the top-M ranked ids over budget —
@@ -147,7 +147,7 @@ public actor SelectionTier {
         // fused score/signals.
         let ranked = await retrievalRanking(intent)
         return matches(
-            forIds: selection.ids,
+            forIDs: selection.ids,
             limit: limit,
             retrievalMatches: Dictionary(uniqueKeysWithValues: ranked.map { ($0.id, $0) })
         )
@@ -201,18 +201,18 @@ public actor SelectionTier {
         // model to choose among -- when the catalog itself is empty.
         guard !candidates.isEmpty else { return [] }
 
-        let candidateIds = candidates.map(\.id)
-        let prefix = Self.assemblePrefix(preamble: config.preamble, ids: candidateIds, catalog: catalog)
+        let candidateIDs = candidates.map(\.id)
+        let prefix = Self.assemblePrefix(preamble: config.preamble, ids: candidateIDs, catalog: catalog)
         // Constrained to *this round's* candidates, not the whole catalog --
         // a one-off session has no stable prefix to reuse, so its grammar is
-        // recomputed fresh per call, scoped to exactly `candidateIds`.
-        let grammar = try Self.idEnumGrammar(ids: candidateIds)
+        // recomputed fresh per call, scoped to exactly `candidateIDs`.
+        let grammar = try Self.idEnumGrammar(ids: candidateIDs)
         let session = config.model(prefix, grammar)
         let selection = try await session.respond(to: intent, generating: Selection.self)
         return matches(
-            forIds: selection.ids,
+            forIDs: selection.ids,
             limit: limit,
-            allowedIds: Set(candidateIds),
+            allowedIDs: Set(candidateIDs),
             retrievalMatches: Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
         )
     }
@@ -230,9 +230,9 @@ public actor SelectionTier {
     /// - Parameters:
     ///   - ids: the model-selected ids, in the order the model returned them.
     ///   - limit: the maximum number of matches to return.
-    ///   - allowedIds: restricts resolution to this id set (the over-budget
+    ///   - allowedIDs: restricts resolution to this id set (the over-budget
     ///     path's current candidates) in addition to the catalog itself; an
-    ///     id absent from `allowedIds` is treated exactly like an id absent
+    ///     id absent from `allowedIDs` is treated exactly like an id absent
     ///     from the catalog. `nil` (the under-budget default) allows any
     ///     catalog id.
     ///   - retrievalMatches: the retrieval `SelectionMatch` (real fused
@@ -241,23 +241,23 @@ public actor SelectionTier {
     ///     budget. An id absent from it is treated exactly like an id absent
     ///     from the catalog (structurally unreachable for both callers:
     ///     `retrievalRanking` covers every catalog id, and the over-budget
-    ///     `allowedIds` are exactly its candidates' keys).
+    ///     `allowedIDs` are exactly its candidates' keys).
     /// - Returns: the verbatim `SelectionMatch`es for every known, allowed,
     ///   first-seen id, each carrying its retrieval `score`/`signals`, at
     ///   most `limit`.
     private func matches(
-        forIds ids: [String],
+        forIDs ids: [String],
         limit: Int,
-        allowedIds: Set<String>? = nil,
+        allowedIDs: Set<String>? = nil,
         retrievalMatches: [String: SelectionMatch]
     ) -> [SelectionMatch] {
         var results: [SelectionMatch] = []
         results.reserveCapacity(min(ids.count, limit))
-        var seenIds: Set<String> = []
+        var seenIDs: Set<String> = []
         for id in ids {
             guard results.count < limit else { break }
-            guard seenIds.insert(id).inserted else { continue }
-            guard allowedIds?.contains(id) ?? true,
+            guard seenIDs.insert(id).inserted else { continue }
+            guard allowedIDs?.contains(id) ?? true,
                 let block = catalog.block(forID: id),
                 let retrievalMatch = retrievalMatches[id]
             else {
@@ -312,7 +312,7 @@ public actor SelectionTier {
     // MARK: - Guided-generation grammar
 
     /// Derives the xgrammar JSON Schema constraining `Selection.ids` to
-    /// exactly `ids` (plan.md §6 "Ids only, grammar-enforced") — the same
+    /// exactly `ids` (plan.md §6 "IDs only, grammar-enforced") — the same
     /// derive-then-wrap pattern as Multitool's own
     /// `Librarian.grammarSchemaSource()` (which wraps the analogous derived
     /// schema in `Grammar.jsonSchema(_:)`), with an `enum` constraint
