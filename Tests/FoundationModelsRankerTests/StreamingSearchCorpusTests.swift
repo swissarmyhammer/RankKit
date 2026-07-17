@@ -347,6 +347,38 @@ struct StreamingSearchCorpusTests {
         #expect(CosineScoring.cosineSimilarity(queryVector, staleVector) != expectedCosine)
     }
 
+    /// The error path in `add(items:)`: when its embed call returns a
+    /// mismatched vector count (or throws), the newly added items are left
+    /// with no stored embedding, but `add` itself still succeeds. This
+    /// drives the follow-up `search(_:limit:)` call and confirms it
+    /// degrades gracefully to keyword-only ranking and reports
+    /// `.embeddingUnavailable`, rather than crashing or silently treating
+    /// the missing embeddings as zero similarity without a diagnostic.
+    ///
+    /// Uses `MismatchedCountEmbedder`, which only fails the batched
+    /// multi-item call `add(items:)` makes here, leaving every one of
+    /// `runAItems`' three rows without a stored embedding. `search(_:limit:)`'s
+    /// per-row embedding-completeness check (in `cosineScores`) finds the
+    /// first of those missing rows and reports `.embeddingUnavailable`
+    /// before it would ever reach a query embed call -- so the resulting
+    /// diagnostic and degradation are attributable specifically to
+    /// `add(items:)`'s error path having left rows unembedded, not to any
+    /// separate query-embed failure.
+    @Test
+    func addWithAMismatchedVectorCountEmbedderLeavesItemsUnembeddedSoSearchDegradesToKeywordOnlyWithDiagnostic() async {
+        let recorder = DiagnosticRecorder()
+        let embedder = MismatchedCountEmbedder(dimension: 8)
+        let actorCorpus = StreamingSearchCorpus(embedder: embedder, onDiagnostic: { recorder.record($0) })
+
+        await actorCorpus.add(items: Self.runAItems)
+
+        let matches = await actorCorpus.search("the parser failed to tokenize the config file", limit: 10)
+
+        #expect(!matches.isEmpty)
+        #expect(matches.allSatisfy { $0.signals?.cosine == 0.0 })
+        #expect(recorder.diagnostics.contains(.embeddingUnavailable))
+    }
+
     @Test
     func noEmbedderDegradesToKeywordOnlyRetrievalAndReportsADiagnosticOnEveryStreamingSearch() async {
         let recorder = DiagnosticRecorder()

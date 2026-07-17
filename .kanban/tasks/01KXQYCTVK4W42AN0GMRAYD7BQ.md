@@ -48,26 +48,32 @@ comments:
 
     Files: SearchCorpus.swift, StreamingSearchCorpus.swift, SearchCorpusTests.swift, StreamingSearchCorpusTests.swift, new Support/CountingEmbedder.swift, new Support/GatedEmbedder.swift.
   timestamp: 2026-07-17T18:29:22.400962+00:00
+- actor: claude-code
+  id: 01kxrqy3attvpr9x45ejnbmbfd
+  text: |-
+    Review findings addressed, both checked off:
+
+    1. New regression test `addWithAMismatchedVectorCountEmbedderLeavesItemsUnembeddedSoSearchDegradesToKeywordOnlyWithDiagnostic` in StreamingSearchCorpusTests.swift, backed by a new small test double `MismatchedCountEmbedder` (Tests/.../Support/MismatchedCountEmbedder.swift). The double fails only *batched* (multi-text) embed calls -- exactly what `add(items:)` makes when embedding more than one newly-added item at once -- by returning one vector short, while a single-text call (the query embed inside `search(_:limit:)`) still succeeds normally. This isolates the assertion to `add(items:)`'s own error-handling: the diagnostic and keyword-only degradation the test observes are attributable to the per-row embedding-completeness check in `cosineScores`, not a second, independent query-embed failure.
+
+       Proved the test genuinely exercises the failure path via mutation testing (same convention as the prior implementer's race regression): temporarily changed `add(items:)`'s guard from `guard let vectors = try? await embedder.embed(...), vectors.count == toEmbed.count else { return }` to silently pad any shortfall with zero vectors instead of aborting -- ran the new test alone, confirmed it failed on exactly the two expected assertions (`cosine == 0.0` and `.embeddingUnavailable` diagnostic), then reverted the guard to its original form and confirmed green again.
+
+    2. Added a doc comment to `CountingEmbedder.embed(_:)` ("Increments the call count and returns embeddings from the wrapped embedder.") per the finding's suggested wording. Audited both CountingEmbedder.swift and GatedEmbedder.swift for the same missing-method-doc pattern -- GatedEmbedder's `embed(_:)` already has one; `dimension` properties on both (and on the pre-existing `FakeEmbedder`) are left undocumented, matching that existing project convention (protocol-level doc on `TextEmbedding.dimension` covers the generic contract; only method bodies with type-specific behavior get their own doc per this codebase's pattern).
+
+    Full `swift test`: 231 tests / 19 suites passing (231 = prior 230 baseline + 1 new test), 0 failures. `swift test --sanitize=thread`: same 231/19 green, no data races reported. No `Package.resolved` diff. Left in `doing` for review.
+  timestamp: 2026-07-17T19:12:59.738389+00:00
+- actor: claude-code
+  id: 01kxrs0jbk07c5rtngpdqapjqb
+  text: |-
+    Adversarial double-check (via really-done) ran and returned REVISE on one doc-accuracy point (no functional bugs): the doc comments on `MismatchedCountEmbedder` and its backing test overclaimed that the query embed inside `search(_:limit:)` "still succeeds" for this specific test, when in fact `cosineScores`'s per-row completeness check short-circuits and returns before ever reaching the query embed call (add's failure leaves all 3 rows unembedded, so the very first row fails the check). The double's single-text passthrough is correct and reusable, just not actually exercised by this particular test's assertions.
+
+    Fixed by rewording both doc comments (MismatchedCountEmbedder.swift's type doc, and the test's doc comment in StreamingSearchCorpusTests.swift) to accurately state that isolation comes from the row-completeness check short-circuiting before any query embed is attempted, and that the single-text passthrough is a general correctness property of the double rather than something this test exercises. Re-ran `swift test` (231/19 green) and `swift test --sanitize=thread` (231/19 green) after the fix; no functional/production code touched by this correction, no Package.resolved diff.
+
+    Both review-finding checkboxes remain `- [x]`. Task left in `doing`, ready for `/review`.
+  timestamp: 2026-07-17T19:31:49.235462+00:00
 depends_on:
 - 01KXQYCNC9J4AQEG4Q7XQRBQ19
 position_column: doing
 position_ordinal: '80'
 title: Incremental embed on the streaming add path
 ---
-## What
-Incremental embedding is currently planned only inside `update(items:)` (re-embed items whose rendered text changed). The streaming corpus (see the additive add/remove task this depends on) needs the same economy on its add path:
-- `add(items:)` with an embedder configured embeds exactly the newly added items, at add time — existing embeddings are never touched, and nothing embeds at query time except the query string itself.
-- `add(items:)` without an embedder stays lexical-only and the existing keyword-only diagnostic behavior is unchanged.
-- Removal drops the item's embedding with the item.
-
-## Acceptance Criteria
-- [ ] With an embedder: each added item is embedded exactly once, at add time; cosine participates in RRF for those items immediately
-- [ ] Per query, only the query string is embedded (one embed call per search)
-- [ ] Without an embedder: adds succeed, retrieval is keyword-only, the reported diagnostic still fires — never silent
-
-## Tests
-- [ ] Counting fake embedder: N adds → exactly N item-embed calls; M searches → exactly M query-embed calls; re-adding an unchanged id does not re-embed
-- [ ] No-embedder path: add + search yields BM25/trigram-only results plus the diagnostic
-
-## Workflow
-- Use /tdd — write failing tests first, then implement to make them pass.
+## What\nIncremental embedding is currently planned only inside `update(items:)` (re-embed items whose rendered text changed). The streaming corpus (see the additive add/remove task this depends on) needs the same economy on its add path:\n- `add(items:)` with an embedder configured embeds exactly the newly added items, at add time — existing embeddings are never touched, and nothing embeds at query time except the query string itself.\n- `add(items:)` without an embedder stays lexical-only and the existing keyword-only diagnostic behavior is unchanged.\n- Removal drops the item's embedding with the item.\n\n## Acceptance Criteria\n- [ ] With an embedder: each added item is embedded exactly once, at add time; cosine participates in RRF for those items immediately\n- [ ] Per query, only the query string is embedded (one embed call per search)\n- [ ] Without an embedder: adds succeed, retrieval is keyword-only, the reported diagnostic still fires — never silent\n\n## Tests\n- [ ] Counting fake embedder: N adds → exactly N item-embed calls; M searches → exactly M query-embed calls; re-adding an unchanged id does not re-embed\n- [ ] No-embedder path: add + search yields BM25/trigram-only results plus the diagnostic\n\n## Workflow\n- Use /tdd — write failing tests first, then implement to make them pass.\n\n## Review Findings (2026-07-17 13:32)\n\n- [x] `Sources/FoundationModelsRanker/StreamingSearchCorpus.swift:117` — The `add()` method's error path (when `embedder.embed()` fails or returns mismatched count) leaves newly-added items without embeddings, but no test exercises the inverse operation (`search()`) after this failure to verify graceful degradation to keyword-only ranking. Add a test using an embedder that throws or returns mismatched vector count during `add(items:)`, then verify the resulting `search()` call degrades to keyword-only and reports `.embeddingUnavailable` diagnostic.\n- [x] `Tests/FoundationModelsRankerTests/Support/CountingEmbedder.swift:34` — Public method `embed(_:)` implementing TextEmbedding protocol lacks documentation. While the class-level documentation explains that this is a call-counting wrapper, the method itself should document its specific behavior for callers reading the type signature. Add a documentation comment to the `embed` method explaining that it increments the call counter before delegating to the wrapped embedder, e.g.: `/// Increments the call count and returns embeddings from the wrapped embedder.`.\n

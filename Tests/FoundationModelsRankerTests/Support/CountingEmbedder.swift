@@ -31,6 +31,8 @@ final class CountingEmbedder: TextEmbedding, Sendable {
     /// The number of times `embed(_:)` has been called so far.
     var callCount: Int { callCountBox.withLock { $0 } }
 
+    /// Increments the call count and returns embeddings from the wrapped
+    /// embedder.
     func embed(_ texts: [String]) async throws -> [[Float]] {
         callCountBox.withLock { $0 += 1 }
         return try await fake.embed(texts)
