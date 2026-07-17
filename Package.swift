@@ -89,8 +89,8 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/swissarmyhammer/\(routerDependencyName)", branch: "main"),
-        .package(url: "https://github.com/swissarmyhammer/\(mlxPackage)", branch: "foundationmodels-fixes"),
+        .package(url: "git@github.com:swissarmyhammer/\(routerDependencyName).git", branch: "main"),
+        .package(url: "git@github.com:swissarmyhammer/\(mlxPackage).git", branch: "foundationmodels-fixes"),
         .package(url: "https://github.com/huggingface/\(huggingFacePackage)", from: "0.9.0"),
         .package(url: "https://github.com/huggingface/\(transformersPackage)", from: "1.3.0"),
         // Pinned below swift-jinja 2.4.0 for the same reason
