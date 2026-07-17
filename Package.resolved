@@ -1,5 +1,5 @@
 {
-  "originHash" : "f8a7304b48ee8f765c290933388bbc32e4a34083cb61736a8556a58b2da20ac2",
+  "originHash" : "97a7660e675c64485fa8950fcd7ad99d950a6abb7b47f7a36ca9d00ba37b8283",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -13,10 +13,10 @@
     {
       "identity" : "foundationmodelsrouter",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swissarmyhammer/FoundationModelsRouter",
+      "location" : "git@github.com:swissarmyhammer/FoundationModelsRouter.git",
       "state" : {
         "branch" : "main",
-        "revision" : "3d3c2e99356e8bba41f01a1dd7a9b2868cdaaa7d"
+        "revision" : "48bbbe5bb1cbedff870736c22798c7bbf61a9562"
       }
     },
     {
@@ -31,10 +31,10 @@
     {
       "identity" : "mlx-swift-lm",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swissarmyhammer/mlx-swift-lm",
+      "location" : "git@github.com:swissarmyhammer/mlx-swift-lm.git",
       "state" : {
         "branch" : "foundationmodels-fixes",
-        "revision" : "cc1728a4aba57fdad44f0e791a2c505dc6459c7f"
+        "revision" : "942d870c77bb02e4484ef6b44afca143f374f46f"
       }
     },
     {
@@ -78,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto.git",
       "state" : {
-        "revision" : "1b6b2e274e85105bfa155183145a1dcfd63331f1",
-        "version" : "4.5.0"
+        "revision" : "47d3869a7291f085c1fb9fb1e6d3b97a793f45c6",
+        "version" : "4.5.1"
       }
     },
     {
