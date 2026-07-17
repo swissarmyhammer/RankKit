@@ -17,10 +17,27 @@
 /// `SearchItem` first.
 public protocol Searchable: Sendable {
     /// This item's id -- what `Searcher.search(_:limit:)` results are keyed
-    /// by, and (BM25-field-weighted as the primary field, `BM25
-    /// .primaryFieldWeight`) part of what retrieval scores against the
-    /// query.
+    /// by, and the identity `SearchCorpus` dedups on. Identity only: it
+    /// seeds `primaryText`'s default, but a conformer that overrides
+    /// `primaryText` keeps `id` as an opaque key that never itself enters
+    /// retrieval scoring.
     var id: String { get }
+
+    /// This item's primary retrieval field -- BM25-field-weighted as the
+    /// primary field (`BM25.primaryFieldWeight`) and trigrammed as the
+    /// primary trigram set, the higher-weighted half of what retrieval
+    /// scores against the query (`text` is the lower-weighted body half).
+    ///
+    /// Defaults to `id`, so a conformer with nothing more salient than its
+    /// id to rank on need not override it -- and every existing conformer
+    /// keeps its prior behavior, in which the id *was* the primary field.
+    /// A conformer whose ranking should key on a distinct salient field --
+    /// a title, a symbol path -- returns that here while keeping `id` as a
+    /// separate opaque identity. Decoupling the two also lifts `id`'s
+    /// uniqueness requirement off that field: two items may share a
+    /// `primaryText` while carrying distinct ids, where collapsing both
+    /// roles onto `id` would have dropped the second as a duplicate.
+    var primaryText: String { get }
 
     /// This item's full text -- the retrieval body field (`BM25
     /// .bodyFieldWeight`) scored against the query, and (when an embedder
@@ -46,6 +63,12 @@ public protocol Searchable: Sendable {
 }
 
 extension Searchable {
+    /// The default primary field: `id` itself -- the pre-`primaryText`
+    /// behavior, in which a conformer's id doubled as its primary retrieval
+    /// field. A conformer with a more salient field to weight (a title, a
+    /// symbol path) overrides this.
+    public var primaryText: String { id }
+
     /// The default summary: `text` itself, verbatim -- a conformer with
     /// nothing shorter to offer the selection prefix.
     public var summary: String { text }
@@ -69,12 +92,19 @@ public struct SearchItem: Searchable, Sendable, Equatable {
     /// This item's id.
     public let id: String
 
+    /// This item's primary retrieval field, weighted `BM25
+    /// .primaryFieldWeight`. Defaults to `id` when
+    /// `init(id:text:primaryText:summary:group:)` receives no explicit
+    /// value -- the pre-`primaryText` behavior, where the id was the
+    /// primary field.
+    public let primaryText: String
+
     /// This item's full text.
     public let text: String
 
     /// This item's summary, seeding the selection prefix. Defaults to
-    /// `text` when `init(id:text:summary:group:)` receives no explicit
-    /// value.
+    /// `text` when `init(id:text:primaryText:summary:group:)` receives no
+    /// explicit value.
     public let summary: String
 
     /// This item's eviction group, or `nil` (the default) for an ungrouped
@@ -86,12 +116,16 @@ public struct SearchItem: Searchable, Sendable, Equatable {
     /// - Parameters:
     ///   - id: this item's id.
     ///   - text: this item's full text.
+    ///   - primaryText: this item's primary retrieval field, weighted
+    ///     `BM25.primaryFieldWeight`. Defaults to `id` when `nil` (the
+    ///     default) -- the pre-`primaryText` behavior.
     ///   - summary: this item's summary, seeding the selection prefix.
     ///     Defaults to `text` when `nil` (the default).
     ///   - group: this item's eviction group. Defaults to `nil` -- an
     ///     ungrouped item, which no `SearchCorpus.remove(group:)` evicts.
-    public init(id: String, text: String, summary: String? = nil, group: String? = nil) {
+    public init(id: String, text: String, primaryText: String? = nil, summary: String? = nil, group: String? = nil) {
         self.id = id
+        self.primaryText = primaryText ?? id
         self.text = text
         self.summary = summary ?? text
         self.group = group

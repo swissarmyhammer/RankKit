@@ -150,7 +150,7 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
             guard rows[item.id] == nil else { continue }
             rows[item.id] = Row(text: item.text, summary: item.summary, group: item.group, embedding: nil)
             ids.append(item.id)
-            documents.append(RankedDocument(primaryText: item.id, bodyText: item.text))
+            documents.append(RankedDocument(primaryText: item.primaryText, bodyText: item.text))
             addedIDs.append(item.id)
         }
         return addedIDs

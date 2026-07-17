@@ -358,4 +358,76 @@ struct SearchCorpusTests {
 
         #expect(corpus.embedding(forID: "a1") == nil)
     }
+
+    // MARK: - primaryText field (decoupled from id)
+
+    @Test
+    func aSearchItemDefaultsPrimaryTextToItsID() {
+        #expect(SearchItem(id: "grep", text: "search file contents").primaryText == "grep")
+        #expect(
+            SearchItem(id: "grep", text: "search file contents", primaryText: "Search.grep").primaryText
+                == "Search.grep"
+        )
+    }
+
+    @Test
+    func anItemWithNoExplicitPrimaryTextWeightsItsIDAsThePrimaryField() {
+        // The pre-`primaryText` behavior, preserved by the `id` default: with
+        // no explicit primary field, the id is weighted `primaryFieldWeight`
+        // and the body text `bodyFieldWeight`.
+        let corpus = SearchCorpus(items: [SearchItem(id: "zephyr", text: "alpha beta")])
+
+        #expect(corpus.documents.first?.weightedTermFrequency["zephyr"] == BM25.primaryFieldWeight)
+        #expect(corpus.documents.first?.weightedTermFrequency["alpha"] == BM25.bodyFieldWeight)
+    }
+
+    @Test
+    func anItemsPrimaryTextIsWeightedAsThePrimaryFieldOutrankingABodyOnlyMatch() {
+        // The seam this whole change exists for: a consumer keying retrieval
+        // on a salient field distinct from its id (a symbol path) -- neither
+        // item's *id* contains the query term, so this only ranks correctly
+        // if `add` routes `primaryText`, not `id`, into the primary field.
+        let query = "retryBackoffStrategy"
+        let corpus = SearchCorpus(items: [
+            SearchItem(
+                id: "1",
+                text: "func retryBackoffStrategy() { compute the retry backoff strategy }",
+                primaryText: "Network.retryBackoffStrategy"
+            ),
+            SearchItem(
+                id: "2",
+                text: "this helper mentions retryBackoffStrategy once in passing",
+                primaryText: "Helpers.doWork"
+            ),
+        ])
+
+        let hits = rank(corpus, query: query)
+
+        let strongIndex = hits.firstIndex { $0.id == "1" }
+        let mediocreIndex = hits.firstIndex { $0.id == "2" }
+        guard let strongIndex, let mediocreIndex else {
+            Issue.record("expected both documents to match")
+            return
+        }
+        #expect(strongIndex < mediocreIndex)
+        #expect(hits[strongIndex].score > hits[mediocreIndex].score)
+    }
+
+    @Test
+    func twoItemsMayShareAPrimaryTextWhileKeepingDistinctIDs() {
+        // Decoupling `primaryText` from `id` lifts `id`'s uniqueness
+        // requirement off the primary field: non-unique symbol paths
+        // (overloads, module-level entries) no longer collide as duplicate
+        // ids, where `id == primaryText` would have dropped the second.
+        var corpus = SearchCorpus()
+        corpus.add(items: [
+            SearchItem(id: "1", text: "first overload", primaryText: "Module.overloaded"),
+            SearchItem(id: "2", text: "second overload", primaryText: "Module.overloaded"),
+        ])
+
+        #expect(corpus.ids == ["1", "2"])
+
+        let hits = rank(corpus, query: "overloaded")
+        #expect(Set(hits.map(\.id)) == ["1", "2"])
+    }
 }
