@@ -16,12 +16,17 @@ import Testing
 struct StreamingSearchCorpusTests {
     // MARK: - Fixtures
 
+    /// Three transcript-entry-shaped items in group `run-a` -- the same
+    /// fixture shape `SearchCorpusTests` uses for the plain `SearchCorpus`,
+    /// so the two suites' equivalence assertions line up.
     static let runAItems = [
         SearchItem(id: "a1", text: "the parser failed to tokenize the config file", group: "run-a"),
         SearchItem(id: "a2", text: "retrying the network request after a timeout", group: "run-a"),
         SearchItem(id: "a3", text: "wrote the config file back to disk", group: "run-a"),
     ]
 
+    /// Two more items in a second group, so group eviction through the
+    /// actor has something to leave untouched.
     static let runBItems = [
         SearchItem(id: "b1", text: "the parser emitted a warning about indentation", group: "run-b"),
         SearchItem(id: "b2", text: "compiled the module without errors", group: "run-b"),
@@ -105,8 +110,9 @@ struct StreamingSearchCorpusTests {
     // MARK: - Concurrent stress
 
     /// Many concurrent producers (add-then-evict a group) and many
-    /// concurrent consumers (search) run against one actor at once. The
-    /// invariant under test: every `SelectionMatch` any search ever
+    /// concurrent consumers (search) run against one actor at once.
+    ///
+    /// The invariant under test: every `SelectionMatch` any search ever
     /// returns must correspond to some item that was, at some point,
     /// *fully* added -- never a partial row (an id present without its
     /// text, or a block that doesn't match the text that id was added

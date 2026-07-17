@@ -66,11 +66,12 @@
 /// safe to call from any task -- Swift 6 strict concurrency enforces it at
 /// compile time, and no manual locking is needed anywhere in this type.
 public actor StreamingSearchCorpus {
-    /// The wrapped corpus. Never exposed directly -- every read and write
-    /// goes through this actor's isolated methods below, which is the
-    /// entire confinement mechanism: nothing outside this type ever holds
-    /// a mutable reference to it, and every access from inside is already
-    /// serialized by actor isolation.
+    /// The wrapped corpus, never exposed directly.
+    ///
+    /// Every read and write goes through this actor's isolated methods
+    /// below, which is the entire confinement mechanism: nothing outside
+    /// this type ever holds a mutable reference to it, and every access
+    /// from inside is already serialized by actor isolation.
     private var corpus: SearchCorpus
 
     /// Creates an empty streaming corpus, ready to `add(items:)` into.
@@ -96,6 +97,7 @@ public actor StreamingSearchCorpus {
 
     /// Adds `items`, exactly as `SearchCorpus.add(items:)` -- see that
     /// method's documentation for the precompute and duplicate-id rules.
+    ///
     /// Safe to call from any task: this call and every other `add`/
     /// `remove`/`search` on this actor serialize against each other, so it
     /// always completes before the next one starts.
@@ -107,8 +109,8 @@ public actor StreamingSearchCorpus {
 
     /// Removes `ids`' rows, exactly as `SearchCorpus.remove(ids:)`.
     ///
-    /// - Parameter ids: the ids to evict. IDs that aren't live are
-    ///   ignored.
+    /// - Parameter ids: the ids to evict; entries for ids that aren't live
+    ///   are silently skipped.
     public func remove(ids: [String]) {
         corpus.remove(ids: ids)
     }

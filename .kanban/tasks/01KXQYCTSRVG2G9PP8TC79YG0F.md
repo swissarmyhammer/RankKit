@@ -38,6 +38,43 @@ comments:
 
     TDD followed: test file written first, confirmed RED via build failure ("cannot find StreamingSearchCorpus in scope"), then implemented to GREEN.
   timestamp: 2026-07-17T15:54:01.598902+00:00
+- actor: claude-code
+  id: 01kxre39zramh4ggv55ea9b0c3
+  text: |-
+    Reworked the 2026-07-17 10:58 review findings via /implement. Pulled task back from `review` to `doing`.
+
+    Fixes:
+    1. Sources/FoundationModelsRanker/StreamingSearchCorpus.swift `add(items:)` doc comment: inserted the missing blank `///` line between the summary sentence ("Adds `items`... duplicate-id rules.") and the elaboration sentence ("Safe to call from any task...").
+    2. Same file, `remove(ids:)` doc comment: changed "IDs that aren't live are ignored" to "ids that aren't live are ignored" to match the parameter's actual lowercase casing.
+    3. Tests/FoundationModelsRankerTests/StreamingSearchCorpusTests.swift: added doc comments to both `runAItems` and `runBItems` (only `runBItems` was cited, but `runAItems` had the identical gap — fixed both for root-cause coverage), matching the established doc style from the sibling `SearchCorpusTests.swift` fixtures.
+
+    Root-cause audit of both files for the same two patterns (missing blank-line separator between summary/elaboration; parameter casing mismatches) turned up no further instances: every other doc comment in StreamingSearchCorpus.swift already either has a single-sentence summary or already separates summary/elaboration with a blank `///` line, and every other parameter doc already matches its parameter's casing. In the test file, `allItems` (computed, derived from the two arrays) intentionally stays undocumented, mirroring the identical precedent in `SearchCorpusTests.swift` where the analogous `allItems` also has no doc comment; `@Test` methods in this codebase are documented via descriptive names only (no doc comments on tests), also per that same sibling file's convention.
+
+    Did not run `swift format` (no config -- would rewrite all 41 tracked files, a known dead end per the task's constraints).
+
+    Verification:
+    - `swift test` -- 216 tests / 19 suites, all green (same as before this pass, since these were doc-comment-only changes).
+    - `swift test --sanitize=thread` -- full suite clean, exit 0, no TSan warnings.
+    - `swift build --build-tests` -- no new warnings introduced (only pre-existing, unrelated package-manifest warnings about an unused `swift-jinja` dependency and an mlx-swift bundle node, present before this change too).
+
+    All three review-finding checkboxes flipped to `- [x]`. Leaving the task in `doing` for `/review` to pick back up, per /implement workflow -- not moving to review or committing.
+  timestamp: 2026-07-17T16:21:04.632740+00:00
+- actor: claude-code
+  id: 01kxrergtdkv0whccemg5vamx8
+  text: |-
+    Adversarial double-check (round 1) caught two doc-comment defects I'd introduced/missed beyond the three cited findings:
+    - `private var corpus: SearchCorpus`'s doc comment had 2 sentences before its first blank `///` line ("The wrapped corpus. Never exposed directly." -- I'd just split the elaboration off without noticing the summary itself was still two sentences). Fixed by merging into one sentence: "The wrapped corpus, never exposed directly."
+    - The stress test's doc comment (`concurrentAddSearchAndRemoveNeverReturnsATornOrPartialMatch`) had 3 sentences before its first blank line. Fixed by inserting the blank `///` line after the first sentence.
+    - Also flagged `Package.resolved` as modified in the working tree -- confirmed this is local noise from running `swift build`/`swift test` (rewrites GitHub HTTPS remotes to SSH via local git config), unrelated to this docs-only task. Reverted it with `git checkout -- Package.resolved` and re-revert after every subsequent test run.
+
+    Round 2 double-check passed on all of the above but raised a new objection: it flagged my finding-#2 fix (`remove(ids:)`'s doc lowercasing "IDs" -> "ids") as wrong, citing `SearchCorpus.swift`'s `remove(ids removedIDs:)` doc (which keeps "IDs that aren't live are ignored" capitalized) as the "established convention", and noting the lowercase fix produced a sentence starting with a lowercase word ("ids that aren't live...").
+
+    Investigated and disagreed with reverting outright: `SearchCorpus.remove(ids removedIDs:)` has a *different* internal parameter name (`removedIDs`, capitalized mid-word) than `StreamingSearchCorpus.remove(ids:)`, whose single external/internal name is literally lowercase `ids` -- the two aren't the same convention case, so that precedent doesn't actually transfer. But the double-check was right that raw-lowercasing produced an ugly sentence-initial lowercase word. The original kanban finding itself anticipated this and offered a rephrase alternative ("or rephrase to avoid ambiguity, e.g. 'entries with non-existent ids are silently skipped'"). Took that path: reworded to "the ids to evict; entries for ids that aren't live are silently skipped" -- one sentence via semicolon, no sentence-initial lowercase word, and `ids` still matches the parameter's actual all-lowercase spelling throughout. This satisfies both the original finding's intent and the double-check's grammar objection.
+
+    Final verification: `swift test` -- 216/19 green. `swift test --sanitize=thread` -- 216/19 green, no TSan warnings. `git diff --stat` -- only StreamingSearchCorpus.swift, StreamingSearchCorpusTests.swift, and this task's two kanban bookkeeping files changed; Package.resolved clean.
+
+    All three original review-finding checkboxes remain `- [x]`. Leaving task in `doing` for `/review`.
+  timestamp: 2026-07-17T16:32:39.757006+00:00
 depends_on:
 - 01KXQYCNC9J4AQEG4Q7XQRBQ19
 position_column: doing
@@ -63,3 +100,9 @@ Give the mutable streaming corpus a safe one:
 
 ## Workflow
 - Use /tdd — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-17 10:58)
+
+- [x] `Sources/FoundationModelsRanker/StreamingSearchCorpus.swift:84` — The summary contains two sentences before the blank line, violating the rule that 'The first line is a single-sentence summary; any elaboration follows after a blank `///` line'. The first sentence ends at line 85 with 'rules.', and a second sentence begins at line 86 with 'Safe to call from any task'. Add a blank `///` line after line 85 to separate the summary from the elaboration, moving 'Safe to call from any task...' into the elaboration section after the blank line, before the parameter documentation.
+- [x] `Sources/FoundationModelsRanker/StreamingSearchCorpus.swift:100` — Parameter documentation uses `IDs` (uppercase acronym) when it should use `ids` (lowercase, matching the parameter name). The rule 'Documented names must match the signature' requires the documented name to match the parameter's casing. Change 'IDs that aren't live are ignored' to 'ids that aren't live are ignored' or rephrase to avoid ambiguity (e.g., 'entries with non-existent ids are silently skipped').
+- [x] `Tests/FoundationModelsRankerTests/StreamingSearchCorpusTests.swift:14` — Public static constant `runBItems` lacks documentation comment. Add a documentation comment explaining the test scenario this represents.
