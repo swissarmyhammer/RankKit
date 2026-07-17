@@ -11,8 +11,12 @@ comments:
 
     Needs a human to push FoundationModelsRanker's main branch first (a git push is outside what /finish or its subagents do unprompted). Leaving this in `todo`/ready per the board, but it will not make real progress until that push happens. Proceeding with ^c79yg0f and ^rayd7bq instead, which are Ranker-only and don't have this cross-repo dependency.
   timestamp: 2026-07-17T15:26:38.497512+00:00
-position_column: todo
-position_ordinal: '8380'
+- actor: claude-code
+  id: 01kxrv55hwymk4bbw64cky52qr
+  text: 'Confirmed done — completed directly in FoundationModelsMetadataRegistry (per user), independent of this /finish batch. Verified: `Sources/FoundationModelsMetadataRegistry/Catalog/MetadataIndex.swift` uses `forID` throughout (`summaryBlock(forID:)`, `block(forID:)`, `item(forID:)`, etc.), no `forId` remaining, and `swift build` there passes clean (exit 0). Moving to done.'
+  timestamp: 2026-07-17T20:09:17.116763+00:00
+position_column: done
+position_ordinal: '9280'
 title: Rename MetadataIndex's SelectionCatalog conformance to forID (paired with Ranker ^xqrbq19)
 ---
 ## What
