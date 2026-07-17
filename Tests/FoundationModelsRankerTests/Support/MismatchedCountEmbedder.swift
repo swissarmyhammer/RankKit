@@ -22,6 +22,7 @@ import FoundationModelsRanker
 /// path alone, and the single-text passthrough here is a correctness
 /// property of this double (not exercised by that particular test).
 final class MismatchedCountEmbedder: TextEmbedding, Sendable {
+    /// The length of every vector this embedder produces.
     let dimension: Int
 
     private let fake: FakeEmbedder
