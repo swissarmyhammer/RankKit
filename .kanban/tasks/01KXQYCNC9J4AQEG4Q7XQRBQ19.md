@@ -19,6 +19,39 @@ comments:
   id: 01kxqz41pymf3ds9zn9k9gd78w
   text: 'Second consumer: FoundationModelsCodeContext. Its SearchCorpus is generation-invalidated wholesale reload today — one file re-index reloads and re-tokenizes the entire corpus. With this API, a file edit becomes remove-by-group(filePath) + add(re-parsed chunks): O(file) instead of O(corpus). Design implication: the group key must be generic (session id for FoundationModelsAgents transcripts, file path for CCK), not session-flavored. Note CCK''s packed vDSP cosine matrix stays wholesale-repacked on its side (cheap memcpy of already-persisted vectors) — the lexical corpus is what mutates additively; the matrix seam is the reserved CosineScoring phase-2 item.'
   timestamp: 2026-07-17T11:59:20.286716+00:00
+- actor: claude-code
+  id: 01kxqzqhdser4ba71fd3msxmpp
+  text: |-
+    IMPORTANT FINDING FOR THE ORCHESTRATOR — `swift format -i -r Sources Tests` is NOT safe to run on this repo as a per-task finishing step.
+
+    There is no `.swift-format` config anywhere in the repo (or up the tree), so `swift format` falls back to its 2-space-indent defaults, while the repo is committed throughout at 4-space indent. Running it rewrites all 41 tracked Swift files: `41 files changed, 4977 insertions(+), 4817 deletions(-)` — an entire-repo reindent, almost none of it this task's code. CI (`.github/workflows/ci.yml` -> swissarmyhammer/workflows swift-ci.yaml@main) does not appear to run a format check that would demand it.
+
+    I ran it as instructed, saw the blast radius, and reverted it — committing a whole-repo reformat would directly violate this card's "stay strictly within scope / no bonus refactoring". My files are hand-written in the repo's prevailing 4-space style instead. Final `git status` is exactly the 5 intended files. If the family does want `swift format` as a gate, that needs its own card: add a `.swift-format` with `indentation: {spaces: 4}` (or accept the reindent) and land the reformat as one isolated commit.
+
+    Implementation landed, tests green:
+    - NEW Sources/FoundationModelsRanker/SearchCorpus.swift — `SearchCorpus`, the queryable corpus. `init(items:)`/`add(items:)`/`remove(ids:)`/`remove(group:)`, conforms to SelectionCatalog. Parallel `ids`/`documents` arrays feed HybridRanker with no per-query rebuild; `init(items:)` delegates to `add(items:)` so batch and incremental share one preprocessing path by construction. Both removals funnel through one private `evict(_ removedIds: Set<String>)` that compacts ids+documents in a single aligned pass — `remove(group:)` differs only in resolving the id set first (also avoids an exclusivity violation from reading `rows` inside a mutating closure).
+    - Sources/FoundationModelsRanker/SearchItem.swift — `Searchable.group: String?` with a `nil` default extension; `SearchItem(id:text:summary:group:)`.
+    - Sources/FoundationModelsRanker/BM25.swift — exposed the globals so they are assertable: `documentCount`, `averageDocumentLength` now public; added `documentFrequency(forTerm:)` and `inverseDocumentFrequency(forTerm:)`. `score` now calls `inverseDocumentFrequency(forTerm:)` instead of re-deriving the idf formula inline (private `documentFrequency` dict renamed `termDocumentFrequency` to free the method name). Documented the query-time-recompute decision on the type.
+    - Sources/FoundationModelsRanker/Searcher.swift — deleted the private `ItemCatalog` (SearchCorpus subsumes it; it duplicated the same first-occurrence-id-wins storage) and moved `RetrievalEngine` onto `corpus: SearchCorpus`, dropping its separate `documents` field. So the corpus really is what the ranking pipeline queries, not an orphan type.
+    - NEW Tests/.../SearchCorpusTests.swift — 13 tests.
+
+    TDD: watched RED first (compile-fail: no SearchCorpus / no `group:` arg). Then, because `init(items:)` delegating to `add(items:)` makes the batch-vs-incremental test partly true by construction, I mutation-checked the suite: deliberately made `evict` leave `documents` stale, and confirmed 3 tests fail for the right reason — `bm25GlobalsAfterInterleavedAddRemoveMatchAFromScratchBuildOfTheSurvivors` (documentCount 5 != 3), `aRemovedDocumentStopsContributingToDocumentFrequency` (df stuck at 2), `removingIdsDropsThemFromEveryLookupAndFromRanking`. Reverted the mutation; green again. The globals assertions genuinely bite.
+
+    `swift test`: 210 tests in 18 suites passed, exit 0 (197 pre-existing + 13 new; no existing test needed changing, which is the no-behavior-change proof for the ItemCatalog->SearchCorpus swap).
+
+    Note for ^rayd7bq (incremental embed): `add(items:)` is deliberately lexical-only here (weighted tf, doc length, trigram sets), exactly as this card enumerates. `Searcher` still holds `itemEmbeddings` as an array positionally aligned with `corpus.ids` — correct today only because `Searcher` never mutates its corpus (documented on `RetrievalEngine.corpus`). ^rayd7bq will need to move the embedding onto the row (or otherwise re-key it) when it makes `add` embed, since append/evict would otherwise desync that array.
+  timestamp: 2026-07-17T12:09:58.969117+00:00
+- actor: claude-code
+  id: 01kxr01frgc66e7revevbjckws
+  text: |-
+    Iteration 1 — /implement landed green in `doing`. New `SearchCorpus` (add/remove/remove(group:), conforms to SelectionCatalog); `init(items:)` delegates to `add(items:)` so batch and incremental share one preprocessing path; both removals funnel through one private `evict`. Deleted the duplicate private `ItemCatalog` from Searcher.swift and moved `RetrievalEngine` onto `corpus: SearchCorpus`. `swift test` → 210 tests / 18 suites passed (197 pre-existing + 13 new; no existing test needed changing).
+
+    **BM25 globals decision — query-time recomputation, NOT an incremental df table.** That was already the design: `BM25Corpus(queryTokens:documents:)` is built per query from the live `documents`, and df is tracked only for the query's own terms. There is no cached global to invalidate, so correctness under any add/remove interleaving is by construction. An incremental df table would track the whole vocabulary to serve queries reading a handful of terms, and would add a staleness failure mode where none exists. Documented on both BM25Corpus and SearchCorpus.
+
+    **Dead end — do not repeat: `swift format -i -r Sources Tests` is NOT safe in this repo.** No `.swift-format` config exists anywhere up the tree, so it falls back to 2-space defaults against a repo committed at 4-space and rewrites all 41 tracked Swift files (4977 insertions / 4817 deletions). It was run, the blast radius seen, and reverted. New code is written in the repo's prevailing 4-space style. Making format a real gate needs its own card (add `.swift-format` with indentation: {spaces: 4}, land the reformat as one isolated commit).
+
+    **For ^rayd7bq (incremental embed):** `add(items:)` is deliberately lexical-only here, as this card enumerates. `Searcher` still holds `itemEmbeddings` as an array positionally aligned with `corpus.ids` — safe today only because Searcher never mutates its corpus (a `let` on a value type). That card will need to move the embedding onto the row when `add` starts embedding, since append/evict would otherwise desync the array.
+  timestamp: 2026-07-17T12:15:24.944311+00:00
 position_column: doing
 position_ordinal: '80'
 title: 'Streaming corpus: additive add/remove with incremental BM25 globals'

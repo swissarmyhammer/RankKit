@@ -32,12 +32,27 @@ public protocol Searchable: Sendable {
     /// `SelectionCatalog.summaryBlock(forId:)`'s source. Defaults to
     /// `text`.
     var summary: String { get }
+
+    /// The eviction group this item belongs to -- `SearchCorpus
+    /// .remove(group:)`'s key, and nothing else: `group` never enters
+    /// retrieval, is never scored, and never reaches the selection prefix.
+    ///
+    /// Exists for the streaming case, where items arrive one at a time but
+    /// leave in cohorts: a producer appending entries for a long-running
+    /// session tags each with that session's identifier, then evicts the
+    /// whole session in one call when it ends. Defaults to `nil` -- an
+    /// ungrouped item, which no `remove(group:)` can ever evict.
+    var group: String? { get }
 }
 
 extension Searchable {
     /// The default summary: `text` itself, verbatim -- a conformer with
     /// nothing shorter to offer the selection prefix.
     public var summary: String { text }
+
+    /// The default group: none -- a conformer whose items are never evicted
+    /// in cohorts, only individually by id (if at all).
+    public var group: String? { nil }
 }
 
 /// The trivial `Searchable` conformer (plan.md §3a): an id, the text that
@@ -58,8 +73,13 @@ public struct SearchItem: Searchable, Sendable, Equatable {
     public let text: String
 
     /// This item's summary, seeding the selection prefix. Defaults to
-    /// `text` when `init(id:text:summary:)` receives no explicit value.
+    /// `text` when `init(id:text:summary:group:)` receives no explicit
+    /// value.
     public let summary: String
+
+    /// This item's eviction group, or `nil` (the default) for an ungrouped
+    /// item -- `SearchCorpus.remove(group:)`'s key.
+    public let group: String?
 
     /// Creates a search item.
     ///
@@ -68,9 +88,12 @@ public struct SearchItem: Searchable, Sendable, Equatable {
     ///   - text: this item's full text.
     ///   - summary: this item's summary, seeding the selection prefix.
     ///     Defaults to `text` when `nil` (the default).
-    public init(id: String, text: String, summary: String? = nil) {
+    ///   - group: this item's eviction group. Defaults to `nil` -- an
+    ///     ungrouped item, which no `SearchCorpus.remove(group:)` evicts.
+    public init(id: String, text: String, summary: String? = nil, group: String? = nil) {
         self.id = id
         self.text = text
         self.summary = summary ?? text
+        self.group = group
     }
 }

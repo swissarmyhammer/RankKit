@@ -142,20 +142,16 @@ public struct Searcher: Sendable {
         mode: Mode = .auto,
         onDiagnostic: @escaping @Sendable (RankDiagnostic) -> Void = { _ in }
     ) async throws {
-        let catalog = ItemCatalog(items: items)
-        let documents = catalog.ids.map { id in
-            RankedDocument(primaryText: id, bodyText: catalog.block(forId: id) ?? "")
-        }
+        let corpus = SearchCorpus(items: items)
         let itemEmbeddings: [[Float]]?
         if let embedder {
-            itemEmbeddings = try await embedder.embed(catalog.ids.map { catalog.block(forId: $0) ?? "" })
+            itemEmbeddings = try await embedder.embed(corpus.ids.map { corpus.block(forId: $0) ?? "" })
         } else {
             itemEmbeddings = nil
         }
 
         let engine = RetrievalEngine(
-            catalog: catalog,
-            documents: documents,
+            corpus: corpus,
             itemEmbeddings: itemEmbeddings,
             embedder: embedder,
             weights: weights,
@@ -171,7 +167,7 @@ public struct Searcher: Sendable {
                 candidateLimit: candidateLimit
             )
             self.selectionTier = SelectionTier(
-                catalog: catalog,
+                catalog: corpus,
                 config: config,
                 onDiagnostic: onDiagnostic,
                 retrievalRanking: engine.fullOrdering
@@ -232,21 +228,24 @@ public struct SelectionTierUnavailable: Error, Sendable, Equatable {
     public init() {}
 }
 
-/// Bundles `Searcher`'s precomputed retrieval state (catalog, ranked
-/// documents, item embeddings) and knobs (`embedder`, `weights`,
-/// `onDiagnostic`) so both `search(_:limit:)`'s own retrieval fallback and
-/// the selection tier's `retrievalRanking` closure (captured at `init`,
-/// before `self` exists as a `Searcher`) drive the same `HybridRanker`
-/// calls without duplicating the wiring.
+/// Bundles `Searcher`'s precomputed retrieval state (the corpus and its item
+/// embeddings) and knobs (`embedder`, `weights`, `onDiagnostic`) so both
+/// `search(_:limit:)`'s own retrieval fallback and the selection tier's
+/// `retrievalRanking` closure (captured at `init`, before `self` exists as a
+/// `Searcher`) drive the same `HybridRanker` calls without duplicating the
+/// wiring.
 private struct RetrievalEngine: Sendable {
-    /// The catalog every id, summary, and block lookup resolves through.
-    let catalog: ItemCatalog
+    /// The corpus this engine ranks: its `ids`/`documents` are
+    /// `HybridRanker`'s arguments, and its `block(forId:)` resolves every hit
+    /// to a verbatim `SelectionMatch`.
+    ///
+    /// Fixed for this engine's lifetime -- `Searcher` builds it once at
+    /// `init` and never mutates it, which is what keeps `itemEmbeddings`
+    /// positionally aligned with `corpus.ids`.
+    let corpus: SearchCorpus
 
-    /// One `RankedDocument` per `catalog.ids` entry, positionally aligned.
-    let documents: [RankedDocument]
-
-    /// One embedding per `catalog.ids` entry, positionally aligned with
-    /// `documents` -- `nil` when no `embedder` was configured.
+    /// One embedding per `corpus.ids` entry, positionally aligned with
+    /// `corpus.documents` -- `nil` when no `embedder` was configured.
     let itemEmbeddings: [[Float]]?
 
     /// Embeds the *query* at search time for the cosine signal. `nil` means
@@ -278,7 +277,7 @@ private struct RetrievalEngine: Sendable {
     /// `HybridRanker` seam.
     ///
     /// - Parameter query: the query to embed and score.
-    /// - Returns: one cosine score per `documents` entry, positionally
+    /// - Returns: one cosine score per `corpus.documents` entry, positionally
     ///   aligned, or `nil` to skip the cosine signal for this search.
     func cosineScores(forQuery query: String) async -> [Double]? {
         guard weights.cosine > 0.0 else { return nil }
@@ -294,7 +293,7 @@ private struct RetrievalEngine: Sendable {
     }
 
     /// `.retrieval` mode's answer: `HybridRanker.topMatches(...)`, mapped
-    /// back through `catalog` to verbatim `SelectionMatch`es.
+    /// back through `corpus` to verbatim `SelectionMatch`es.
     ///
     /// - Parameters:
     ///   - query: the search query.
@@ -304,84 +303,49 @@ private struct RetrievalEngine: Sendable {
         guard limit > 0 else { return [] }
         return await rankedMatches(forQuery: query) { scores in
             HybridRanker.topMatches(
-                ids: catalog.ids, documents: documents, query: query, cosineScores: scores, weights: weights, limit: limit
+                ids: corpus.ids,
+                documents: corpus.documents,
+                query: query,
+                cosineScores: scores,
+                weights: weights,
+                limit: limit
             )
         }
     }
 
     /// The selection tier's `retrievalRanking` source
     /// (`SelectionTier.init(catalog:config:onDiagnostic:retrievalRanking:)`):
-    /// `HybridRanker.fullOrdering(...)`, mapped back through `catalog` to
-    /// verbatim `SelectionMatch`es -- always exactly `catalog.ids.count`
-    /// long. Over budget it supplies the top-M candidate cut; under budget
-    /// it supplies the real fused `score`/`signals` every selected id
-    /// carries.
+    /// `HybridRanker.fullOrdering(...)`, mapped back through `corpus` to
+    /// verbatim `SelectionMatch`es -- always exactly `corpus.count` long.
+    /// Over budget it supplies the top-M candidate cut; under budget it
+    /// supplies the real fused `score`/`signals` every selected id carries.
     ///
     /// - Parameter query: the search intent.
-    /// - Returns: exactly `catalog.ids.count` matches, best-first.
+    /// - Returns: exactly `corpus.count` matches, best-first.
     func fullOrdering(query: String) async -> [SelectionMatch] {
         await rankedMatches(forQuery: query) { scores in
             HybridRanker.fullOrdering(
-                ids: catalog.ids, documents: documents, query: query, cosineScores: scores, weights: weights
+                ids: corpus.ids, documents: corpus.documents, query: query, cosineScores: scores, weights: weights
             )
         }
     }
 
     /// The shared ranking pipeline of `topMatches` and `fullOrdering`, which
     /// differ only in the `HybridRanker` call `rank` binds: short-circuit an
-    /// empty catalog, resolve the cosine signal once, rank, and map the hits
-    /// back through `catalog` to verbatim `SelectionMatch`es.
+    /// empty corpus, resolve the cosine signal once, rank, and map the hits
+    /// back through `corpus` to verbatim `SelectionMatch`es.
     ///
     /// - Parameters:
     ///   - query: the search query to resolve cosine scores for.
-    ///   - rank: ranks the catalog given the resolved cosine scores (`nil`
+    ///   - rank: ranks the corpus given the resolved cosine scores (`nil`
     ///     when the signal is skipped), in whatever order it decides.
     /// - Returns: one `SelectionMatch` per hit, positionally aligned with
     ///   `rank`'s result.
     private func rankedMatches(forQuery query: String, rank: ([Double]?) -> [Hit]) async -> [SelectionMatch] {
-        guard !documents.isEmpty else { return [] }
+        guard !corpus.isEmpty else { return [] }
         let hits = rank(await cosineScores(forQuery: query))
         return hits.map { hit in
-            SelectionMatch(id: hit.id, block: catalog.block(forId: hit.id) ?? "", score: hit.score, signals: hit.signals)
+            SelectionMatch(id: hit.id, block: corpus.block(forId: hit.id) ?? "", score: hit.score, signals: hit.signals)
         }
     }
-}
-
-/// The in-memory `SelectionCatalog` `Searcher` builds from its `Searchable`
-/// items at `init` (plan.md §3a): first-occurrence-id-wins, so a caller
-/// passing a duplicate id is never a crash.
-private struct ItemCatalog: SelectionCatalog {
-    /// This catalog's ids, in first-seen order.
-    let ids: [String]
-
-    /// id -> `text` (the retrieval body field, and `SelectionMatch.block`'s
-    /// source).
-    private let texts: [String: String]
-
-    /// id -> `summary` (the selection prefix's source).
-    private let summaries: [String: String]
-
-    /// Builds a catalog from `items`, first-occurrence-id-wins.
-    ///
-    /// - Parameter items: the items to index.
-    init<Item: Searchable>(items: [Item]) {
-        var ids: [String] = []
-        var texts: [String: String] = [:]
-        var summaries: [String: String] = [:]
-        ids.reserveCapacity(items.count)
-        texts.reserveCapacity(items.count)
-        summaries.reserveCapacity(items.count)
-        for item in items {
-            guard texts[item.id] == nil else { continue }
-            ids.append(item.id)
-            texts[item.id] = item.text
-            summaries[item.id] = item.summary
-        }
-        self.ids = ids
-        self.texts = texts
-        self.summaries = summaries
-    }
-
-    func summaryBlock(forId id: String) -> String? { summaries[id] }
-    func block(forId id: String) -> String? { texts[id] }
 }
