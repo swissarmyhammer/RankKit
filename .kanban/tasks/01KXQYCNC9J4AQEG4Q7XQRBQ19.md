@@ -52,6 +52,24 @@ comments:
 
     **For ^rayd7bq (incremental embed):** `add(items:)` is deliberately lexical-only here, as this card enumerates. `Searcher` still holds `itemEmbeddings` as an array positionally aligned with `corpus.ids` — safe today only because Searcher never mutates its corpus (a `let` on a value type). That card will need to move the embedding onto the row when `add` starts embedding, since append/evict would otherwise desync the array.
   timestamp: 2026-07-17T12:15:24.944311+00:00
+- actor: claude-code
+  id: 01kxr1a5aeazsw2b30wkx353sp
+  text: |-
+    Review findings worked — all 5 checked off, left green in `doing` (not moved to `review`; orchestrator owns that transition and the commit).
+
+    Only file touched: `Sources/FoundationModelsRanker/SearchCorpus.swift` (+17/-3).
+
+    1. `evict(_ removedIds:)` -> `evict(ids removedIds: Set<String>)`; both call sites now read `evict(ids: Set(removedIds))` and `evict(ids: Set(ids.filter { ... }))`. `evict` is private, so blast radius is file-local — grep confirms exactly 3 `evict(` hits (decl + 2 call sites), no stray unlabeled callers.
+    2-5. `///` docs added to the two `SelectionCatalog` conformance methods `summaryBlock(forId:)` / `block(forId:)`, in the protocol's prevailing `- Parameter forId:` / `- Returns: ... or `nil` if ...` form, stating the not-found semantics explicitly (nil = no live row: an id never added, or one since removed).
+
+    **Root-caused, not just the cited lines.** Findings 2/3 and 4/5 are duplicate reports of the same two declarations — those were the *only* two undocumented public decls in the file. Audited all 12 public decls (`SearchCorpus`, `ids`, `documents`, `count`, `isEmpty`, `init()`, `init(items:)`, `add(items:)`, `remove(ids:)`, `remove(group:)`, `summaryBlock(forId:)`, `block(forId:)`) — every one now carries `///`. A re-review of the file finds zero recurrences.
+
+    **BM25 rationale confirmed present and substantive** (the card's "decide, document the choice, and test it"). `SearchCorpus`'s type doc names the decision (globals recomputed per query, never cached), the reason (any cached copy is wrong the moment a row is added/removed), and explicitly names and rejects the alternative incremental df table (whole-vocabulary tracking to serve queries that read a handful of terms, plus a staleness failure mode that doesn't exist today). `BM25Corpus` in BM25.swift carries the matching "**Per query, never cached across queries.**" rationale. Not hand-waving — both name decision, alternative, and tradeoff.
+
+    `swift test`: 210 tests / 18 suites passed, exit 0 — unchanged baseline, no test needed touching (docs + an internal label are behavior-preserving). Did NOT run `swift format` (known dead end, see earlier comment); the new lines are hand-written 4-space, verified zero 2-space lines and zero tabs in the file.
+
+    **Non-blocking nit found by double-check, deliberately NOT fixed (out of scope, pre-existing prose):** both rationales say the BM25Corpus build is free because it rides "the single pass it already makes to score them" / "the same pass the scorer already makes". `HybridRanker.computeBM25Ranking` actually makes three distinct passes — a `map` to `(documentLength, termSet)` pairs, `BM25Corpus.init` over that array, then a scoring `map`. The load-bearing claim (O(N) either way, no asymptotic cost) still holds, so the decision stands; only the "same pass" phrasing overstates. Predates this diff. Worth a wording tightening next time BM25.swift is touched — flagging rather than silently widening this card's scope.
+  timestamp: 2026-07-17T12:37:37.742221+00:00
 position_column: doing
 position_ordinal: '80'
 title: 'Streaming corpus: additive add/remove with incremental BM25 globals'
@@ -80,3 +98,11 @@ Storage stays out of scope: the Ranker remains storage-free (in-memory precomput
 
 ## Workflow
 - Use /tdd — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-17 07:18)
+
+- [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:133` — The first parameter to the private `evict(_:)` method is unlabeled, which violates the rule that labels should be omitted only for value-preserving conversions. Removing rows from a corpus is not a value-preserving conversion; the parameter should be labeled for clarity. Call sites like `evict(Set(removedIds))` (line 106) and `evict(Set(...))` (line 112) would read more clearly as `evict(ids: Set(removedIds))`. Label the first parameter: `private mutating func evict(ids removedIds: Set<String>)`.
+- [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:151` — The public function `summaryBlock(forId:)` lacks a `///` doc comment. Every public declaration must carry a doc comment per the documentation rule. Add a doc comment: `/// The summary for the given id, or `nil` if the id is not live.` or similar descriptive text.
+- [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:152` — The public function `block(forId:)` lacks a `///` doc comment. Every public declaration must carry a doc comment per the documentation rule. Add a doc comment: `/// The full text for the given id, or `nil` if the id is not live.` or similar descriptive text.
+- [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:156` — Public function `summaryBlock(forId:)` lacks documentation. This is a `SelectionCatalog` protocol conformance method that returns an item's summary text — callers need to know its purpose and what it returns when the id is not found. Add a documentation comment explaining what this function does, e.g. `/// Returns the summary for the item with the given id, or `nil` if not found.`.
+- [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:157` — Public function `block(forId:)` lacks documentation. This is a `SelectionCatalog` protocol conformance method that returns an item's full text — callers need to know its purpose and what it returns when the id is not found. Add a documentation comment explaining what this function does, e.g. `/// Returns the full text for the item with the given id, or `nil` if not found.`.

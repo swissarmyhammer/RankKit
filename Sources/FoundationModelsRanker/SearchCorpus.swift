@@ -137,7 +137,7 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
     ///
     /// - Parameter ids: the ids to evict.
     public mutating func remove(ids removedIds: [String]) {
-        evict(Set(removedIds))
+        evict(ids: Set(removedIds))
     }
 
     /// Removes every row in `group` -- the cohort eviction a streaming
@@ -149,7 +149,7 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
     ///
     /// - Parameter group: the group to evict.
     public mutating func remove(group: String) {
-        evict(Set(ids.filter { rows[$0]?.group == group }))
+        evict(ids: Set(ids.filter { rows[$0]?.group == group }))
     }
 
     /// Drops `removedIds`' rows, compacting `ids` and `documents` together
@@ -159,7 +159,7 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
     ///
     /// - Parameter removedIds: the ids to drop. Ids that aren't live are
     ///   ignored.
-    private mutating func evict(_ removedIds: Set<String>) {
+    private mutating func evict(ids removedIds: Set<String>) {
         guard !removedIds.isEmpty else { return }
 
         var survivingIds: [String] = []
@@ -178,6 +178,20 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
         }
     }
 
+    /// `id`'s summary -- the `SelectionCatalog` lookup that seeds a selection
+    /// tier's assembled prefix. O(1) however large the corpus has streamed.
+    ///
+    /// - Parameter forId: the id to look up.
+    /// - Returns: the id's summary text, or `nil` if no row with that id is
+    ///   live -- an id never added, or one since removed.
     public func summaryBlock(forId id: String) -> String? { rows[id]?.summary }
+
+    /// `id`'s full, verbatim text -- the `SelectionCatalog` lookup a
+    /// model-selected id resolves to as a result payload. O(1) however large
+    /// the corpus has streamed.
+    ///
+    /// - Parameter forId: the id to look up.
+    /// - Returns: the id's full text, or `nil` if no row with that id is live
+    ///   -- an id never added, or one since removed.
     public func block(forId id: String) -> String? { rows[id]?.text }
 }
