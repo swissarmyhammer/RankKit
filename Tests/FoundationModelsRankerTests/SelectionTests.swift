@@ -7,7 +7,7 @@ import Testing
 /// Tests for the selection tier's under-budget path (plan.md §6 phase 3): a
 /// cached root session seeded once with the assembled prefix, `fork()` per
 /// `search()` call, the summary-vs-full block separation
-/// (`summaryBlock(forId:)` seeds the prefix; `block(forId:)` is what a
+/// (`summaryBlock(forID:)` seeds the prefix; `block(forID:)` is what a
 /// `SelectionMatch` carries back verbatim), ids-only decoding, verbatim
 /// lookup by id, unknown-id filtering + diagnostic, and the id-enum
 /// grammar's contents.

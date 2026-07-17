@@ -35,8 +35,8 @@ struct SelectionCoreTests {
         fileprivate let summaries: [String: String]
         fileprivate let blocks: [String: String]
 
-        func summaryBlock(forId id: String) -> String? { summaries[id] }
-        func block(forId id: String) -> String? { blocks[id] }
+        func summaryBlock(forID id: String) -> String? { summaries[id] }
+        func block(forID id: String) -> String? { blocks[id] }
     }
 
     @Test
@@ -48,16 +48,16 @@ struct SelectionCoreTests {
         )
 
         #expect(catalog.ids == ["deploy"])
-        #expect(catalog.summaryBlock(forId: "deploy") == "short summary")
-        #expect(catalog.block(forId: "deploy") == "the full rendered block")
+        #expect(catalog.summaryBlock(forID: "deploy") == "short summary")
+        #expect(catalog.block(forID: "deploy") == "the full rendered block")
     }
 
     @Test
     func selectionCatalogReturnsNilForAnUnknownId() {
         let catalog = FixtureCatalog(ids: [], summaries: [:], blocks: [:])
 
-        #expect(catalog.summaryBlock(forId: "missing") == nil)
-        #expect(catalog.block(forId: "missing") == nil)
+        #expect(catalog.summaryBlock(forID: "missing") == nil)
+        #expect(catalog.block(forID: "missing") == nil)
     }
 
     // MARK: - `RankDiagnostic` value semantics

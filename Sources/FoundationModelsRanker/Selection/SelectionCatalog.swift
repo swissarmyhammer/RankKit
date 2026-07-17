@@ -4,7 +4,7 @@
 // captures the three operations `SelectionTier` actually used from
 // `MetadataIndex`: the full candidate id set, each id's rendered summary
 // (`SearchableMetadata.renderSummaryBlock()`), and each id's verbatim block
-// (`MetadataIndex.block(forId:)`).
+// (`MetadataIndex.block(forID:)`).
 
 /// The catalog contract FoundationModelsRanker's selection tier drives its assembled prefix
 /// and verbatim result lookup through.
@@ -24,20 +24,20 @@ public protocol SelectionCatalog: Sendable {
 
     /// A (typically shorter) summary of `id`'s item, used to seed the
     /// selection tier's assembled prefix instead of the full
-    /// `block(forId:)` -- the seam `SearchableMetadata.renderSummaryBlock()`
+    /// `block(forID:)` -- the seam `SearchableMetadata.renderSummaryBlock()`
     /// filled in the source tier, generalized here to a per-id lookup.
     ///
-    /// - Parameter forId: the id to look up.
+    /// - Parameter id: the id to look up.
     /// - Returns: the id's summary text, or `nil` if `id` isn't in this
     ///   catalog.
-    func summaryBlock(forId id: String) -> String?
+    func summaryBlock(forID id: String) -> String?
 
     /// `id`'s full, verbatim result payload -- what a model-selected id
     /// resolves to in the tier's returned results, never re-derived from
     /// the model's own output.
     ///
-    /// - Parameter forId: the id to look up.
+    /// - Parameter id: the id to look up.
     /// - Returns: the id's verbatim block, or `nil` if `id` isn't in this
     ///   catalog.
-    func block(forId id: String) -> String?
+    func block(forID id: String) -> String?
 }

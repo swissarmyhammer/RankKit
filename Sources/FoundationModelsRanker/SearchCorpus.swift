@@ -51,10 +51,10 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
     /// without a per-query rebuild.
     private struct Row: Sendable {
         /// The item's full text: the retrieval body field, and
-        /// `block(forId:)`'s answer.
+        /// `block(forID:)`'s answer.
         let text: String
 
-        /// The item's summary: `summaryBlock(forId:)`'s answer, which seeds
+        /// The item's summary: `summaryBlock(forID:)`'s answer, which seeds
         /// the selection prefix.
         let summary: String
 
@@ -76,7 +76,7 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
     public private(set) var documents: [RankedDocument]
 
     /// id -> the row's text, summary, and group. Keyed rather than
-    /// positional, so `block(forId:)`/`summaryBlock(forId:)` stay O(1) as the
+    /// positional, so `block(forID:)`/`summaryBlock(forID:)` stay O(1) as the
     /// corpus streams.
     private var rows: [String: Row]
 
@@ -135,7 +135,7 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
     /// Removes `ids`' rows from this corpus. Ids that aren't live are
     /// ignored.
     ///
-    /// - Parameter ids: the ids to evict.
+    /// - Parameter removedIds: the ids to evict.
     public mutating func remove(ids removedIds: [String]) {
         evict(ids: Set(removedIds))
     }
@@ -181,17 +181,17 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
     /// `id`'s summary -- the `SelectionCatalog` lookup that seeds a selection
     /// tier's assembled prefix. O(1) however large the corpus has streamed.
     ///
-    /// - Parameter forId: the id to look up.
+    /// - Parameter id: the id to look up.
     /// - Returns: the id's summary text, or `nil` if no row with that id is
     ///   live -- an id never added, or one since removed.
-    public func summaryBlock(forId id: String) -> String? { rows[id]?.summary }
+    public func summaryBlock(forID id: String) -> String? { rows[id]?.summary }
 
     /// `id`'s full, verbatim text -- the `SelectionCatalog` lookup a
     /// model-selected id resolves to as a result payload. O(1) however large
     /// the corpus has streamed.
     ///
-    /// - Parameter forId: the id to look up.
+    /// - Parameter id: the id to look up.
     /// - Returns: the id's full text, or `nil` if no row with that id is live
     ///   -- an id never added, or one since removed.
-    public func block(forId id: String) -> String? { rows[id]?.text }
+    public func block(forID id: String) -> String? { rows[id]?.text }
 }

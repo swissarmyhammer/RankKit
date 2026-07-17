@@ -6,7 +6,7 @@ import Testing
 
 /// Tests for the selection tier's over-budget path (plan.md §6 phase 3):
 /// when the assembled prefix (preamble + every candidate's
-/// `summaryBlock(forId:)`) exceeds `capacityCharacterLimit`, the injected
+/// `summaryBlock(forID:)`) exceeds `capacityCharacterLimit`, the injected
 /// `retrievalRanking` closure ranks the whole catalog and the
 /// top-`candidateLimit` candidates (best-first) seed a fresh, uncached,
 /// unforked one-off session — constrained to those candidate ids only —
@@ -63,14 +63,14 @@ struct OverBudgetTests {
             if id == "alpha" {
                 return SelectionMatch(
                     id: id,
-                    block: catalog.block(forId: id) ?? "",
+                    block: catalog.block(forID: id) ?? "",
                     score: 0.9,
                     signals: Signals(bm25: 5.0, trigram: 0.0, cosine: 0.0)
                 )
             }
             return SelectionMatch(
                 id: id,
-                block: catalog.block(forId: id) ?? "",
+                block: catalog.block(forID: id) ?? "",
                 score: 0.0,
                 signals: Signals(bm25: 0.0, trigram: 0.0, cosine: 0.0)
             )

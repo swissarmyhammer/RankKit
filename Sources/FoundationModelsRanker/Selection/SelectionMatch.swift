@@ -16,7 +16,7 @@ public struct SelectionMatch: Sendable, Equatable {
     public let id: String
 
     /// The matched id's block, **verbatim from the catalog** --
-    /// `SelectionCatalog.block(forId:)`'s output, never re-derived and never
+    /// `SelectionCatalog.block(forID:)`'s output, never re-derived and never
     /// model output (plan.md §1 "Verbatim by construction, not by prompt").
     public let block: String
 

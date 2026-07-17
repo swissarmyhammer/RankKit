@@ -1,9 +1,9 @@
 // Ported from FoundationModelsMetadataRegistry's
 // `Sources/FoundationModelsMetadataRegistry/Selection/SelectionTier.swift`
 // (plan.md §6 phase 3), generalized over `any SelectionCatalog` instead of
-// `MetadataIndex<Item>`: `index.ids`/`item(forId:)`/`block(forId:)`/
-// `renderSummaryBlock()` map onto `catalog.ids`/`summaryBlock(forId:)`/
-// `block(forId:)`; `Match<Item>` becomes `SelectionMatch` (no catalog item to
+// `MetadataIndex<Item>`: `index.ids`/`item(forID:)`/`block(forID:)`/
+// `renderSummaryBlock()` map onto `catalog.ids`/`summaryBlock(forID:)`/
+// `block(forID:)`; `Match<Item>` becomes `SelectionMatch` (no catalog item to
 // carry); `MetadataDiagnostic` becomes `RankDiagnostic`. Semantics unchanged.
 
 import Foundation
@@ -16,8 +16,8 @@ import FoundationModelsRouter
 /// narrow `SelectionCatalog` conformer instead of a bespoke index type.
 ///
 /// Assembles a prefix from `SelectionConfig.preamble` + every catalog id's
-/// **`summaryBlock(forId:)`** (plan.md §4: the summary seeds the selection
-/// prefix; retrieval indexes the full `block(forId:)` instead) once at
+/// **`summaryBlock(forID:)`** (plan.md §4: the summary seeds the selection
+/// prefix; retrieval indexes the full `block(forID:)` instead) once at
 /// `init`, since the catalog never changes for this tier's lifetime — a
 /// reload replaces the whole tier rather than mutating one in place.
 ///
@@ -180,7 +180,7 @@ public actor SelectionTier {
     /// candidate set to pick from), reports the cut via
     /// `.retrievalCut(considered:kept:)`, and seeds a **fresh, uncached,
     /// unforked** one-off session with exactly those candidates'
-    /// `summaryBlock(forId:)`s — there is no stable prefix here to reuse,
+    /// `summaryBlock(forID:)`s — there is no stable prefix here to reuse,
     /// since the candidate set differs per intent.
     ///
     /// - Parameters:
@@ -258,7 +258,7 @@ public actor SelectionTier {
             guard results.count < limit else { break }
             guard seenIds.insert(id).inserted else { continue }
             guard allowedIds?.contains(id) ?? true,
-                let block = catalog.block(forId: id),
+                let block = catalog.block(forID: id),
                 let retrievalMatch = retrievalMatches[id]
             else {
                 onDiagnostic(.unknownSelectedId(id: id))
@@ -280,7 +280,7 @@ public actor SelectionTier {
 
     /// Assembles this tier's instruction prefix (plan.md §6): `preamble`
     /// followed by a `# Candidates` header and every catalog id's
-    /// **`summaryBlock(forId:)`**, in catalog order — never `block(forId:)`,
+    /// **`summaryBlock(forID:)`**, in catalog order — never `block(forID:)`,
     /// which stays reserved for the verbatim `SelectionMatch.block` a
     /// selected id looks up afterward (plan.md §4).
     ///
@@ -294,7 +294,7 @@ public actor SelectionTier {
 
     /// Assembles an instruction prefix for an arbitrary candidate id
     /// set (plan.md §6): `preamble` followed by a `# Candidates` header and
-    /// exactly those ids' **`summaryBlock(forId:)`**, in `ids`' order —
+    /// exactly those ids' **`summaryBlock(forID:)`**, in `ids`' order —
     /// `assemblePrefix(preamble:catalog:)`'s whole-catalog case is
     /// `ids: catalog.ids`; the over-budget path passes the top-M ranked ids
     /// instead, best-first.
@@ -305,7 +305,7 @@ public actor SelectionTier {
     ///   - catalog: the catalog to look candidate summaries up in.
     /// - Returns: the assembled prefix text.
     public static func assemblePrefix(preamble: String, ids: [String], catalog: any SelectionCatalog) -> String {
-        let summaryBlocks = ids.compactMap { catalog.summaryBlock(forId: $0) }
+        let summaryBlocks = ids.compactMap { catalog.summaryBlock(forID: $0) }
         return "\(preamble)\n\n# Candidates\n\(summaryBlocks.joined(separator: "\n\n"))"
     }
 

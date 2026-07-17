@@ -103,7 +103,7 @@ struct SearchCorpusTests {
         corpus.add(items: [SearchItem(id: "a1", text: "completely different replacement text")])
 
         #expect(corpus.ids == ["a1", "a2", "a3"])
-        #expect(corpus.block(forId: "a1") == "the parser failed to tokenize the config file")
+        #expect(corpus.block(forID: "a1") == "the parser failed to tokenize the config file")
     }
 
     // MARK: - BM25 globals under interleaved add/remove
@@ -186,9 +186,9 @@ struct SearchCorpusTests {
 
         #expect(corpus.ids == ["a2", "a3", "b1"])
         #expect(corpus.documents.count == 3)
-        #expect(corpus.block(forId: "a1") == nil)
-        #expect(corpus.summaryBlock(forId: "a1") == nil)
-        #expect(corpus.block(forId: "a2") == "retrying the network request after a timeout")
+        #expect(corpus.block(forID: "a1") == nil)
+        #expect(corpus.summaryBlock(forID: "a1") == nil)
+        #expect(corpus.block(forID: "a2") == "retrying the network request after a timeout")
 
         let hits = rank(corpus, query: "tokenize the config file")
         #expect(!hits.contains { $0.id == "a1" })
@@ -210,7 +210,7 @@ struct SearchCorpusTests {
         corpus.add(items: [SearchItem(id: "a1", text: "a fresh row under a recycled id", group: "run-a")])
 
         #expect(corpus.ids == ["a2", "a3", "a1"])
-        #expect(corpus.block(forId: "a1") == "a fresh row under a recycled id")
+        #expect(corpus.block(forID: "a1") == "a fresh row under a recycled id")
     }
 
     // MARK: - Remove by group
@@ -222,7 +222,7 @@ struct SearchCorpusTests {
 
         #expect(corpus.ids == ["b1", "b2"])
         for id in Self.runAItems.map(\.id) {
-            #expect(corpus.block(forId: id) == nil)
+            #expect(corpus.block(forID: id) == nil)
         }
 
         // The evicted group's content is gone from queries...
@@ -276,7 +276,7 @@ struct SearchCorpusTests {
         ])
 
         #expect(corpus.count == 1)
-        #expect(corpus.block(forId: "tool") == "the full text that retrieval indexes")
-        #expect(corpus.summaryBlock(forId: "tool") == "the short selection summary")
+        #expect(corpus.block(forID: "tool") == "the full text that retrieval indexes")
+        #expect(corpus.summaryBlock(forID: "tool") == "the short selection summary")
     }
 }

@@ -29,7 +29,7 @@ public protocol Searchable: Sendable {
 
     /// A (typically shorter) summary of this item, used to seed the
     /// selection tier's assembled prefix instead of the full `text` --
-    /// `SelectionCatalog.summaryBlock(forId:)`'s source. Defaults to
+    /// `SelectionCatalog.summaryBlock(forID:)`'s source. Defaults to
     /// `text`.
     var summary: String { get }
 

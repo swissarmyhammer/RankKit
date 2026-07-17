@@ -70,6 +70,34 @@ comments:
 
     **Non-blocking nit found by double-check, deliberately NOT fixed (out of scope, pre-existing prose):** both rationales say the BM25Corpus build is free because it rides "the single pass it already makes to score them" / "the same pass the scorer already makes". `HybridRanker.computeBM25Ranking` actually makes three distinct passes — a `map` to `(documentLength, termSet)` pairs, `BM25Corpus.init` over that array, then a scoring `map`. The load-bearing claim (O(N) either way, no asymptotic cost) still holds, so the decision stands; only the "same pass" phrasing overstates. Predates this diff. Worth a wording tightening next time BM25.swift is touched — flagging rather than silently widening this card's scope.
   timestamp: 2026-07-17T12:37:37.742221+00:00
+- actor: claude-code
+  id: 01kxr27sz4x3z410hze8hav1ah
+  text: |-
+    Iteration 2 → checkpoint 9f8ac2e. First review pass (on 9283621) raised 5 findings — `evict(_:)` param label + missing `///` docs on public decls in SearchCorpus.swift. All 5 fixed at the root and verified: a whole-file engine run now returns ZERO findings, no undocumented public decl remains.
+
+    Review pass 2 (on 9f8ac2e) → 3 NEW findings (3 confirmed, 5 refuted, 14 attempted). Findings 1 and 3 are the direct consequence of pass 1's fix — adding docs introduced doc-convention violations (`- Parameter ids:` → `- Parameter removedIds:` at :130, `- Parameter forId:` → `- Parameter id:` at :161; docs must use the binding name, not the external label). Finding 2: `forId` → `forID` at :155 (interior acronym uniformly uppercase).
+
+    **Finding 2 has blast radius — read before fixing.** `summaryBlock(forId:)`/`block(forId:)` are `SelectionCatalog` protocol conformance methods. Renaming only the conformance BREAKS conformance; the protocol declaration in Selection/SelectionCatalog.swift must be renamed in lockstep with every conformer and call site.
+
+    **Engine inconsistency worth knowing:** the same file yields 3 findings under `review sha` but 0 under `review file`. The reviewer treated the sha run as authoritative (it's the assigned scope, and each finding survived a verify pass) rather than dropping them on the strength of the clean run. The whole-file run's silence on `forId` is not agreement — possible validator scoping bug.
+
+    **Also queued, deliberately NOT fixed (out of this card's scope):** the BM25 rationale prose in SearchCorpus.swift and BM25.swift claims the corpus build rides "the same pass the scorer already makes," but `HybridRanker.computeBM25Ranking` actually makes three passes (map to (documentLength, termSet), BM25Corpus.init, then a scoring map). The load-bearing claim (O(N) either way, no asymptotic cost) still holds, so the documented decision stands — only the wording overstates. Tighten next time BM25.swift is touched.
+  timestamp: 2026-07-17T12:53:49.156670+00:00
+- actor: claude-code
+  id: 01kxr5z7khkvnhp8hg82xtgzh3
+  text: |-
+    Worked the three 07:40 review findings. All three now `- [x]`. `swift test` green: 210 tests / 18 suites, matching baseline. Task left in `doing`, uncommitted.
+
+    **Findings 1 and 3 (doc binding names)** — trivial, plus a root sweep: audited every `- Parameter` in all six touched files against its actual binding. Two violations existed beyond the cited lines (`block(forID:)`'s own doc in SearchCorpus, and both docs on the `SelectionCatalog` protocol). All fixed; a re-review should find zero recurrences.
+
+    **Finding 2 (`forId` -> `forID`)** — real blast radius, renamed in lockstep across 10 files: the `SelectionCatalog` protocol (both requirements), all 3 in-repo conformers (`SearchCorpus`, `FixtureSelectionCatalog`, `SelectionCoreTests.FixtureCatalog`), every call site in `Searcher`/`SelectionTier`, and every doc reference. Note `block(forId:)` had to be renamed too though only `summaryBlock` was cited — leaving it would have produced a protocol with mixed spellings.
+
+    **IMPORTANT — cross-repo break, see new task ^01xa7rp.** My first pass concluded "no external consumers" and that was WRONG: a workspace-wide grep timed out and I only checked FoundationModelsAgents before moving on. The adversarial double-check caught it. `FoundationModelsMetadataRegistry` depends on Ranker pinned to `branch: "main"` and has a **fourth conformer** — `extension MetadataIndex: SelectionCatalog` — implementing `summaryBlock(forId:)`/`block(forId:)`. After this rename `summaryBlock(forID:)` does not exist there, so MetadataRegistry will fail to compile on its next resolve. Did NOT edit that repo (separate repo, outside this task's stated scope); filed ^01xa7rp for the paired change, which must land after this one is committed.
+
+    **Dead end worth recording:** I initially justified leaving two `forId` mentions in SelectionCatalog.swift/SelectionTier.swift headers as "references to another package's API". That reasoning was circular and partly false — `MetadataIndex.item(forId:)` never existed (it is `item(forID:)`), and `block(forId:)` is only a shim that exists *because* our protocol said `forId` (its own doc says "under the protocol's `forId` spelling"). MetadataRegistry already renamed its own API to `forID` in commit `e1770d8`, so `forID` is the family convention and this change follows it rather than diverging. Both header references corrected; repo now has zero `forId`.
+
+    Out of scope and deliberately untouched: the known "same pass"/three-passes BM25 prose inaccuracy.
+  timestamp: 2026-07-17T13:59:02.513622+00:00
 position_column: doing
 position_ordinal: '80'
 title: 'Streaming corpus: additive add/remove with incremental BM25 globals'
@@ -106,3 +134,9 @@ Storage stays out of scope: the Ranker remains storage-free (in-memory precomput
 - [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:152` — The public function `block(forId:)` lacks a `///` doc comment. Every public declaration must carry a doc comment per the documentation rule. Add a doc comment: `/// The full text for the given id, or `nil` if the id is not live.` or similar descriptive text.
 - [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:156` — Public function `summaryBlock(forId:)` lacks documentation. This is a `SelectionCatalog` protocol conformance method that returns an item's summary text — callers need to know its purpose and what it returns when the id is not found. Add a documentation comment explaining what this function does, e.g. `/// Returns the summary for the item with the given id, or `nil` if not found.`.
 - [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:157` — Public function `block(forId:)` lacks documentation. This is a `SelectionCatalog` protocol conformance method that returns an item's full text — callers need to know its purpose and what it returns when the id is not found. Add a documentation comment explaining what this function does, e.g. `/// Returns the full text for the item with the given id, or `nil` if not found.`.
+
+## Review Findings (2026-07-17 07:40)
+
+- [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:130` — Parameter documentation uses the external label `ids` instead of the parameter binding name `removedIds` — rule requires 'Parameter name:', matching how the parameter is used inside the function. Change '- Parameter ids:' to '- Parameter removedIds:' in the remove(ids:) documentation block.
+- [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:155` — Parameter label `forId` should be `forID` — the acronym ID is interior to the lowerCamelCase name and must be uniformly all-uppercase per the examples: `entryID`, `generatedTokenIDs`. Change parameter label to `forID`: `public func summaryBlock(forID id: String)`.
+- [x] `Sources/FoundationModelsRanker/SearchCorpus.swift:161` — Parameter documentation uses the label `forId` but should use the parameter binding name `id` (same violation as line 153). Change '- Parameter forId:' to '- Parameter id:' in the block documentation block.

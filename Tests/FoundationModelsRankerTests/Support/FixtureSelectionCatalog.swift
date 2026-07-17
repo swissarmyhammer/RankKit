@@ -33,12 +33,12 @@ struct FixtureSelectionCatalog: SelectionCatalog {
         self.items = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
     }
 
-    func summaryBlock(forId id: String) -> String? {
+    func summaryBlock(forID id: String) -> String? {
         guard let item = items[id] else { return nil }
         return item.summary ?? item.block
     }
 
-    func block(forId id: String) -> String? {
+    func block(forID id: String) -> String? {
         items[id]?.block
     }
 }

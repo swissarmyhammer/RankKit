@@ -145,7 +145,7 @@ public struct Searcher: Sendable {
         let corpus = SearchCorpus(items: items)
         let itemEmbeddings: [[Float]]?
         if let embedder {
-            itemEmbeddings = try await embedder.embed(corpus.ids.map { corpus.block(forId: $0) ?? "" })
+            itemEmbeddings = try await embedder.embed(corpus.ids.map { corpus.block(forID: $0) ?? "" })
         } else {
             itemEmbeddings = nil
         }
@@ -236,7 +236,7 @@ public struct SelectionTierUnavailable: Error, Sendable, Equatable {
 /// wiring.
 private struct RetrievalEngine: Sendable {
     /// The corpus this engine ranks: its `ids`/`documents` are
-    /// `HybridRanker`'s arguments, and its `block(forId:)` resolves every hit
+    /// `HybridRanker`'s arguments, and its `block(forID:)` resolves every hit
     /// to a verbatim `SelectionMatch`.
     ///
     /// Fixed for this engine's lifetime -- `Searcher` builds it once at
@@ -345,7 +345,7 @@ private struct RetrievalEngine: Sendable {
         guard !corpus.isEmpty else { return [] }
         let hits = rank(await cosineScores(forQuery: query))
         return hits.map { hit in
-            SelectionMatch(id: hit.id, block: corpus.block(forId: hit.id) ?? "", score: hit.score, signals: hit.signals)
+            SelectionMatch(id: hit.id, block: corpus.block(forID: hit.id) ?? "", score: hit.score, signals: hit.signals)
         }
     }
 }
