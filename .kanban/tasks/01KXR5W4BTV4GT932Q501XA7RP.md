@@ -1,6 +1,16 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01kxrazmd111qep5yq06zc71sr
+  text: |-
+    Skipping for now in this /finish batch — not actually actionable yet, despite showing READY.
+
+    FoundationModelsMetadataRegistry/Package.swift:200 resolves FoundationModelsRanker as a remote GitHub dependency pinned to `branch: "main"`, not a local path override. The forId→forID rename landed in Ranker only as LOCAL commits on this machine (^xqrbq19's checkpoints, final eb521d8) — /finish's contract is commit-only, never push. Until those commits reach github.com/swissarmyhammer/FoundationModelsRanker's main branch, `swift package resolve`/`update` here will keep pulling the OLD (still-`forId`) Ranker, so renaming MetadataIndex's conformance now would break the build against the actual resolved dependency, not fix it — exactly backwards from the goal.
+
+    Needs a human to push FoundationModelsRanker's main branch first (a git push is outside what /finish or its subagents do unprompted). Leaving this in `todo`/ready per the board, but it will not make real progress until that push happens. Proceeding with ^c79yg0f and ^rayd7bq instead, which are Ranker-only and don't have this cross-repo dependency.
+  timestamp: 2026-07-17T15:26:38.497512+00:00
 position_column: todo
 position_ordinal: '8380'
 title: Rename MetadataIndex's SelectionCatalog conformance to forID (paired with Ranker ^xqrbq19)

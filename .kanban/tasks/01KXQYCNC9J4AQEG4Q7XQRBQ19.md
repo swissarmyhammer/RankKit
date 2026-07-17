@@ -122,8 +122,17 @@ comments:
 
     Adversarial double-check verdict handling: returned REVISE with two findings. Finding 1 (the two OverBudgetTests names) FIXED. Finding 2 (13 further recurrences in SelectionTests.swift + SelectionCoreTests.swift, which are in the card's full commit delta but NOT in the working-tree diff and NOT in the coordinator's explicit sweep list) — PROCEEDING PER LOGGED JUSTIFICATION: the resume instruction re-confirmed scope as "ONLY the files this card already touches (SelectionTier, SearchCorpus, SearchItem, BM25, Searcher, SelectionCatalog, SelectionMatch, SearchCorpusTests, and the OverBudgetTests test names)". SelectionTests.swift and SelectionCoreTests.swift are not on that list and are not in the working-tree delta a re-review sees. Extending to them would be the scope creep the instruction forbids. Flagging for a potential follow-up card if the family wants those two swept too.
   timestamp: 2026-07-17T15:03:45.885980+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01kxrax2ca5wm7qwgkm1s0wgds
+  text: |-
+    DONE. 4 iterations, 4 review passes: pass 1 (5 findings: evict param label, missing docs) → pass 2 (3 findings: doc binding-name convention, forId→forID) → pass 3 (2 findings: forIds/allowedIds casing) → pass 4 clean, moved to done. Final checkpoint eb521d8. swift test green throughout: 210 tests / 18 suites.
+
+    Unblocks ^c79yg0f (Actor confinement for the mutable streaming corpus) and ^rayd7bq (Incremental embed on the streaming add path) — both now ready.
+
+    Filed follow-up task ^01xa7rp for FoundationModelsMetadataRegistry: the forId→forID rename in commit 204d8db breaks its `extension MetadataIndex: SelectionCatalog` conformer (implements `summaryBlock(forId:)`), since that repo depends on Ranker pinned to branch:"main". Must land after this.
+  timestamp: 2026-07-17T15:25:14.506430+00:00
+position_column: done
+position_ordinal: 8f80
 title: 'Streaming corpus: additive add/remove with incremental BM25 globals'
 ---
 ## What
