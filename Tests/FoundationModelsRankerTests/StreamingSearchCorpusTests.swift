@@ -39,7 +39,7 @@ struct StreamingSearchCorpusTests {
     @Test
     func theActorInitializedWithItemsRanksIdenticallyToThePlainCorpus() async {
         let plain = SearchCorpus(items: Self.allItems)
-        let actorCorpus = StreamingSearchCorpus(items: Self.allItems)
+        let actorCorpus = await StreamingSearchCorpus(items: Self.allItems)
 
         let query = "parser config file"
         let expectedHits = HybridRanker.topMatches(ids: plain.ids, documents: plain.documents, query: query, limit: 10)
@@ -72,7 +72,7 @@ struct StreamingSearchCorpusTests {
 
     @Test
     func removingIDsThroughTheActorDropsThemFromSearchAndLookups() async {
-        let actorCorpus = StreamingSearchCorpus(items: Self.allItems)
+        let actorCorpus = await StreamingSearchCorpus(items: Self.allItems)
         await actorCorpus.remove(ids: ["a1", "b2"])
 
         let count = await actorCorpus.count
@@ -86,7 +86,7 @@ struct StreamingSearchCorpusTests {
 
     @Test
     func removingAGroupThroughTheActorEvictsEveryMemberAndLeavesOtherGroupsUntouched() async {
-        let actorCorpus = StreamingSearchCorpus(items: Self.allItems)
+        let actorCorpus = await StreamingSearchCorpus(items: Self.allItems)
         await actorCorpus.remove(group: "run-a")
 
         let isEmpty = await actorCorpus.isEmpty
@@ -187,5 +187,245 @@ struct StreamingSearchCorpusTests {
         }
         let finalCount = await actorCorpus.count
         #expect(finalCount == survivors.count)
+    }
+
+    // MARK: - Incremental embed on the add path (^rayd7bq)
+
+    @Test
+    func eachAddedItemIsEmbeddedExactlyOnceAtAddTimeAndOnlyTheQueryIsEmbeddedPerSearch() async {
+        let embedder = CountingEmbedder(dimension: 8)
+        let actorCorpus = StreamingSearchCorpus(embedder: embedder)
+
+        await actorCorpus.add(items: [Self.runAItems[0]])
+        await actorCorpus.add(items: [Self.runAItems[1]])
+        await actorCorpus.add(items: [Self.runAItems[2]])
+        #expect(embedder.callCount == 3)
+
+        // Re-adding an id that's already live is a dropped duplicate --
+        // nothing new to embed, so no additional embed call happens.
+        await actorCorpus.add(items: [Self.runAItems[0]])
+        #expect(embedder.callCount == 3)
+
+        _ = await actorCorpus.search("parser config file", limit: 5)
+        _ = await actorCorpus.search("timeout", limit: 5)
+        #expect(embedder.callCount == 5)
+    }
+
+    @Test
+    func cosineParticipatesInRankingImmediatelyAfterAddWithAnEmbedderConfigured() async throws {
+        let embedder = FakeEmbedder(dimension: 8)
+        let actorCorpus = StreamingSearchCorpus(embedder: embedder)
+        await actorCorpus.add(items: Self.runAItems)
+
+        let query = "the parser failed to tokenize the config file"
+        let matches = await actorCorpus.search(query, limit: 10)
+
+        #expect(!matches.isEmpty)
+        let queryVector = try await embedder.embed([query])[0]
+        for match in matches {
+            let item = try #require(Self.runAItems.first { $0.id == match.id })
+            let itemVector = try await embedder.embed([item.text])[0]
+            let expectedCosine = CosineScoring.cosineSimilarity(queryVector, itemVector)
+            #expect(match.signals?.cosine == expectedCosine)
+        }
+    }
+
+    @Test
+    func removingAnItemDropsItsEmbeddingSoALaterCompleteReembedIsUnaffectedByItsStaleVector() async throws {
+        let embedder = FakeEmbedder(dimension: 8)
+        let actorCorpus = StreamingSearchCorpus(embedder: embedder)
+        await actorCorpus.add(items: Self.runAItems)
+        await actorCorpus.remove(ids: ["a1"])
+
+        // "a1" is gone; the surviving two items must still carry real,
+        // independently-recomputable cosine scores -- nothing about removing
+        // one row's embedding should disturb the others.
+        let query = "retrying the network request after a timeout"
+        let matches = await actorCorpus.search(query, limit: 10)
+
+        #expect(!matches.contains { $0.id == "a1" })
+        let queryVector = try await embedder.embed([query])[0]
+        for match in matches {
+            let item = try #require(Self.runAItems.first { $0.id == match.id })
+            let itemVector = try await embedder.embed([item.text])[0]
+            #expect(match.signals?.cosine == CosineScoring.cosineSimilarity(queryVector, itemVector))
+        }
+    }
+
+    @Test
+    func removingThenReAddingAnIDIsEmbeddedAgainRatherThanTreatedAsAnUnchangedDuplicate() async throws {
+        // A recycled id is a fresh row (`SearchCorpus.add(items:)`'s own
+        // rule), never treated as an unchanged duplicate -- it must be
+        // embedded again, and the stored vector must reflect the fresh
+        // text. (This is the sequential-happy-path case: each `add`/
+        // `remove` call here runs to full completion before the next
+        // starts, so it does not by itself exercise the async
+        // stale-write race `ifTextMatches:` guards against -- see
+        // `aStaleInFlightEmbedForAResurrectedIDNeverOverwritesItsFreshVector`
+        // for that.)
+        let embedder = CountingEmbedder(dimension: 8)
+        let actorCorpus = StreamingSearchCorpus(embedder: embedder)
+        let originalText = "original text about parsing config"
+        let freshText = "a completely different replacement about network requests"
+
+        await actorCorpus.add(items: [SearchItem(id: "x", text: originalText)])
+        #expect(embedder.callCount == 1)
+
+        await actorCorpus.remove(ids: ["x"])
+        await actorCorpus.add(items: [SearchItem(id: "x", text: freshText)])
+        #expect(embedder.callCount == 2)
+
+        let query = "network requests"
+        let matches = await actorCorpus.search(query, limit: 5)
+        let match = try #require(matches.first { $0.id == "x" })
+
+        let queryVector = try await embedder.embed([query])[0]
+        let freshVector = try await embedder.embed([freshText])[0]
+        let staleVector = try await embedder.embed([originalText])[0]
+        let expectedCosine = CosineScoring.cosineSimilarity(queryVector, freshVector)
+        #expect(match.signals?.cosine == expectedCosine)
+        #expect(CosineScoring.cosineSimilarity(queryVector, staleVector) != expectedCosine)
+    }
+
+    /// The genuine async-race regression: unlike the sequential test above,
+    /// this deliberately keeps a stale embed call *in flight* while the row
+    /// underneath it changes, using `GatedEmbedder` to hold both calls open
+    /// until the interleaving is set up exactly as intended.
+    ///
+    /// Sequence: id `"x"`'s first `add(items:)` (text `originalText`)
+    /// starts embedding and parks *before* its embed call resolves. While
+    /// parked, `"x"` is removed and re-added with `freshText` -- that
+    /// second `add`'s own embed call also parks (same gated embedder).
+    /// Only then are both released together. The first call's write-back
+    /// (`ifTextMatches: originalText`) must lose against `"x"`'s
+    /// already-updated live text and be dropped; the second call's
+    /// write-back (`ifTextMatches: freshText`) must win. Without the
+    /// `ifTextMatches` guard (liveness-only), the first call's write would
+    /// instead silently overwrite the row with `originalText`'s vector,
+    /// corrupting cosine for `"x"` from then on with no diagnostic.
+    @Test
+    func aStaleInFlightEmbedForAResurrectedIDNeverOverwritesItsFreshVector() async throws {
+        let embedder = GatedEmbedder(dimension: 8)
+        let actorCorpus = StreamingSearchCorpus(embedder: embedder)
+        let originalText = "original text about parsing config"
+        let freshText = "a completely different replacement about network requests"
+
+        // Call #1: "x" / originalText. Starts, embeds, parks.
+        let staleAdd = Task {
+            await actorCorpus.add(items: [SearchItem(id: "x", text: originalText)])
+        }
+        await embedder.waitUntilEntered(callNumber: 1)
+
+        // While call #1 is still parked mid-embed, a concurrent producer
+        // removes "x" and re-adds it under the same id with different
+        // text. Call #2: "x" / freshText. Starts, embeds, also parks.
+        await actorCorpus.remove(ids: ["x"])
+        let freshAdd = Task {
+            await actorCorpus.add(items: [SearchItem(id: "x", text: freshText)])
+        }
+        await embedder.waitUntilEntered(callNumber: 2)
+
+        // Release both parked embed calls together, then let both `add`
+        // calls' write-backs land in whatever order the runtime schedules.
+        embedder.release()
+        _ = await staleAdd.value
+        _ = await freshAdd.value
+
+        let query = "network requests"
+        let matches = await actorCorpus.search(query, limit: 5)
+        let match = try #require(matches.first { $0.id == "x" })
+
+        // A plain (ungated) embedder produces identical vectors -- same
+        // deterministic hash, same dimension -- without re-parking.
+        let plainEmbedder = FakeEmbedder(dimension: 8)
+        let queryVector = try await plainEmbedder.embed([query])[0]
+        let freshVector = try await plainEmbedder.embed([freshText])[0]
+        let staleVector = try await plainEmbedder.embed([originalText])[0]
+        let expectedCosine = CosineScoring.cosineSimilarity(queryVector, freshVector)
+
+        #expect(match.signals?.cosine == expectedCosine)
+        #expect(CosineScoring.cosineSimilarity(queryVector, staleVector) != expectedCosine)
+    }
+
+    @Test
+    func noEmbedderDegradesToKeywordOnlyRetrievalAndReportsADiagnosticOnEveryStreamingSearch() async {
+        let recorder = DiagnosticRecorder()
+        let actorCorpus = StreamingSearchCorpus(onDiagnostic: { recorder.record($0) })
+        await actorCorpus.add(items: Self.runAItems)
+
+        let matches = await actorCorpus.search("the parser failed to tokenize the config file", limit: 10)
+
+        #expect(!matches.isEmpty)
+        #expect(matches.allSatisfy { $0.signals?.cosine == 0.0 })
+        #expect(recorder.diagnostics.contains(.embeddingUnavailable))
+    }
+
+    /// With an embedder configured, `add(items:)`/`search(_:limit:)` each
+    /// suspend at an `await embedder.embed(_:)` call -- unlike every other
+    /// method here, which never suspends. A concurrent `remove`/`add` can
+    /// therefore run during that gap. This is the regression case for that:
+    /// without `search(_:limit:)`'s pre-suspension snapshot (see its
+    /// documentation), a concurrent mutation between snapshotting
+    /// `corpus.ids` for the cosine array and re-reading `corpus.ids`/
+    /// `corpus.documents` for `HybridRanker.topMatches` could desync the two
+    /// and trip its alignment precondition -- a crash under real concurrent
+    /// traffic. This drives exactly that interleaving and asserts it
+    /// neither crashes nor returns a torn match.
+    @Test
+    func concurrentAddSearchAndRemoveWithAnEmbedderConfiguredNeverCrashesOrReturnsATornMatch() async {
+        let embedder = FakeEmbedder(dimension: 8)
+        let actorCorpus = StreamingSearchCorpus(embedder: embedder)
+
+        let groupCount = 10
+        let itemsPerGroup = 5
+        var expectedText: [String: String] = [:]
+        var evictedGroups: [[SearchItem]] = []
+        for g in 0..<groupCount {
+            let items = (0..<itemsPerGroup).map { i -> SearchItem in
+                let id = "g\(g)-i\(i)"
+                let text = "streamed item \(id) about parsing config files and retrying network requests"
+                expectedText[id] = text
+                return SearchItem(id: id, text: text, group: "run-\(g)")
+            }
+            evictedGroups.append(items)
+        }
+
+        let survivors = (0..<20).map { SearchItem(id: "surv-\($0)", text: "surviving item about parsing config") }
+        for item in survivors {
+            expectedText[item.id] = item.text
+        }
+
+        await withTaskGroup(of: [SelectionMatch].self) { group in
+            for items in evictedGroups {
+                group.addTask {
+                    await actorCorpus.add(items: items)
+                    await actorCorpus.remove(group: items[0].group!)
+                    return []
+                }
+            }
+            group.addTask {
+                await actorCorpus.add(items: survivors)
+                return []
+            }
+            for _ in 0..<100 {
+                group.addTask {
+                    await actorCorpus.search("parsing config network", limit: 50)
+                }
+            }
+
+            for await matches in group {
+                for match in matches {
+                    let text = expectedText[match.id]
+                    #expect(text != nil, "match id \(match.id) was never a known added item")
+                    #expect(match.block == text, "match block for \(match.id) doesn't match its added text -- torn read")
+                }
+            }
+        }
+
+        let finalMatches = await actorCorpus.search("surviving item parsing config", limit: 1000)
+        #expect(!finalMatches.isEmpty)
+        for match in finalMatches {
+            #expect(match.id.hasPrefix("surv-"))
+        }
     }
 }

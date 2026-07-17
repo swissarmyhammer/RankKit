@@ -279,4 +279,83 @@ struct SearchCorpusTests {
         #expect(corpus.block(forID: "tool") == "the full text that retrieval indexes")
         #expect(corpus.summaryBlock(forID: "tool") == "the short selection summary")
     }
+
+    // MARK: - Embedding storage (^rayd7bq: row-keyed, not a parallel positional array)
+
+    @Test
+    func addReturnsExactlyTheAddedIDsExcludingDroppedDuplicates() {
+        var corpus = SearchCorpus(items: [Self.runAItems[0]])
+
+        let added = corpus.add(items: [
+            Self.runAItems[0],  // already live -- dropped, must not appear in the return
+            Self.runAItems[1],
+            Self.runAItems[2],
+        ])
+
+        #expect(added == ["a2", "a3"])
+    }
+
+    @Test
+    func aFreshRowHasNoEmbeddingUntilOneIsSet() {
+        let corpus = SearchCorpus(items: [Self.runAItems[0]])
+
+        #expect(corpus.embedding(forID: "a1") == nil)
+    }
+
+    @Test
+    func settingAnEmbeddingStoresItForLaterLookup() {
+        var corpus = SearchCorpus(items: [Self.runAItems[0]])
+
+        corpus.setEmbedding([0.1, 0.2, 0.3], forID: "a1", ifTextMatches: Self.runAItems[0].text)
+
+        #expect(corpus.embedding(forID: "a1") == [0.1, 0.2, 0.3])
+    }
+
+    @Test
+    func settingAnEmbeddingForAnIDThatIsNotLiveIsANoOp() {
+        var corpus = SearchCorpus(items: [Self.runAItems[0]])
+
+        corpus.setEmbedding([0.1, 0.2, 0.3], forID: "nope", ifTextMatches: "anything")
+
+        #expect(corpus.embedding(forID: "nope") == nil)
+    }
+
+    @Test
+    func settingAnEmbeddingWhoseExpectedTextNoLongerMatchesTheLiveRowIsANoOp() {
+        // The race this guards against: an embed call is async, computed
+        // against a captured `expectedText`. Before its write lands, the id
+        // could have been removed and re-added with *different* text (e.g.
+        // a concurrent producer on the same streaming actor). Liveness
+        // alone can't catch that -- the id is live again, just under a
+        // different row. The text check must reject the stale write rather
+        // than silently pairing the old vector with the new text.
+        var corpus = SearchCorpus(items: [Self.runAItems[0]])
+        corpus.remove(ids: ["a1"])
+        corpus.add(items: [SearchItem(id: "a1", text: "a different row under the same recycled id")])
+
+        corpus.setEmbedding([0.1, 0.2, 0.3], forID: "a1", ifTextMatches: Self.runAItems[0].text)
+
+        #expect(corpus.embedding(forID: "a1") == nil)
+    }
+
+    @Test
+    func removingAnIDDropsItsStoredEmbeddingWithTheRow() {
+        var corpus = SearchCorpus(items: [Self.runAItems[0]])
+        corpus.setEmbedding([0.1, 0.2, 0.3], forID: "a1", ifTextMatches: Self.runAItems[0].text)
+
+        corpus.remove(ids: ["a1"])
+
+        #expect(corpus.embedding(forID: "a1") == nil)
+    }
+
+    @Test
+    func aRowAddedBackUnderARecycledIDStartsWithNoEmbedding() {
+        var corpus = SearchCorpus(items: [Self.runAItems[0]])
+        corpus.setEmbedding([0.1, 0.2, 0.3], forID: "a1", ifTextMatches: Self.runAItems[0].text)
+        corpus.remove(ids: ["a1"])
+
+        corpus.add(items: [SearchItem(id: "a1", text: "a fresh row under a recycled id")])
+
+        #expect(corpus.embedding(forID: "a1") == nil)
+    }
 }

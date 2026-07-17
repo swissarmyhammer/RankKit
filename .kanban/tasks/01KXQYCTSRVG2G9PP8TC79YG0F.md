@@ -75,10 +75,14 @@ comments:
 
     All three original review-finding checkboxes remain `- [x]`. Leaving task in `doing` for `/review`.
   timestamp: 2026-07-17T16:32:39.757006+00:00
+- actor: claude-code
+  id: 01kxrf1v9jgwetezzkrhz62sz0
+  text: 'DONE. 2 iterations, 2 review passes: pass 1 (3 findings: doc blank-line separators, ids casing mismatch, missing fixture doc) → pass 2 clean, moved to done. Final checkpoint 106268f. swift test green throughout (216/19); swift test --sanitize=thread clean both passes.'
+  timestamp: 2026-07-17T16:37:45.394320+00:00
 depends_on:
 - 01KXQYCNC9J4AQEG4Q7XQRBQ19
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9080'
 title: Actor confinement for the mutable streaming corpus
 ---
 ## What

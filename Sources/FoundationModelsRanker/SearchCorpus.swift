@@ -61,6 +61,19 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
         /// The item's eviction group, or `nil` for an ungrouped row that no
         /// `remove(group:)` can evict.
         let group: String?
+
+        /// The item's embedding, or `nil` until
+        /// `setEmbedding(_:forID:ifTextMatches:)` fills it in (or forever,
+        /// when no embedder is in play).
+        ///
+        /// Stored on the row, keyed by id, rather than in a separate
+        /// positionally-aligned array (^rayd7bq: incremental embed on the
+        /// streaming add path). A corpus that streams -- rows appended by
+        /// `add(items:)` and dropped by `evict(ids:)` -- can't keep a
+        /// parallel array in sync with `ids`/`documents` the moment either
+        /// happens; row-keyed storage has no such array to desync, and is
+        /// dropped automatically with the rest of the row on removal.
+        var embedding: [Float]?
     }
 
     /// This corpus's ids, in add order -- first-occurrence-id-wins, so a
@@ -120,16 +133,27 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
     /// the end.
     ///
     /// - Parameter items: the items to add.
-    public mutating func add<Item: Searchable>(items: [Item]) {
+    /// - Returns: the ids actually added, in `items` order -- excludes any
+    ///   dropped duplicates. This is exactly the set a caller embedding
+    ///   incrementally (^rayd7bq) should embed and pass to
+    ///   `setEmbedding(_:forID:ifTextMatches:)`: a duplicate this call
+    ///   dropped was never added, so embedding its text would be wasted
+    ///   work for a row that doesn't exist.
+    @discardableResult
+    public mutating func add<Item: Searchable>(items: [Item]) -> [String] {
         ids.reserveCapacity(ids.count + items.count)
         documents.reserveCapacity(documents.count + items.count)
         rows.reserveCapacity(rows.count + items.count)
+        var addedIDs: [String] = []
+        addedIDs.reserveCapacity(items.count)
         for item in items {
             guard rows[item.id] == nil else { continue }
-            rows[item.id] = Row(text: item.text, summary: item.summary, group: item.group)
+            rows[item.id] = Row(text: item.text, summary: item.summary, group: item.group, embedding: nil)
             ids.append(item.id)
             documents.append(RankedDocument(primaryText: item.id, bodyText: item.text))
+            addedIDs.append(item.id)
         }
+        return addedIDs
     }
 
     /// Removes `ids`' rows from this corpus. IDs that aren't live are
@@ -194,4 +218,48 @@ public struct SearchCorpus: SelectionCatalog, Sendable {
     /// - Returns: the id's full text, or `nil` if no row with that id is live
     ///   -- an id never added, or one since removed.
     public func block(forID id: String) -> String? { rows[id]?.text }
+
+    // MARK: - Embedding storage (^rayd7bq)
+
+    /// `id`'s stored embedding.
+    ///
+    /// - Parameter id: the id to look up.
+    /// - Returns: the id's stored embedding, or `nil` if `id` isn't live, or
+    ///   is live but hasn't been embedded (no embedder configured for this
+    ///   corpus, or a failed embed call left it unset).
+    public func embedding(forID id: String) -> [Float]? { rows[id]?.embedding }
+
+    /// Stores `embedding` for `id`, but only if `id` is still live **and**
+    /// its current text still equals `expectedText` -- the write is a no-op
+    /// otherwise.
+    ///
+    /// The incremental-embed write a streaming consumer (^rayd7bq) makes
+    /// once per newly added item, right after `add(items:)` returns the ids
+    /// it actually added and an embedder embeds their text in one batched
+    /// call. `expectedText` should be exactly the text that was embedded to
+    /// produce `embedding` -- typically captured via `block(forID:)` in the
+    /// same synchronous step that resolved which ids to embed, before the
+    /// embedder's `await`.
+    ///
+    /// Guarding on `expectedText`, not just liveness, closes a real race: an
+    /// embed call is asynchronous, so between when its text was captured and
+    /// when this write lands, `id` could have been removed *and re-added*
+    /// with *different* text (e.g. by a concurrent producer on the same
+    /// streaming actor) -- liveness alone can't detect that, since the id is
+    /// live again, just under a different row. Applying a stale vector to
+    /// that new row would silently pair the wrong embedding with the wrong
+    /// text, with no diagnostic and no way to detect the corruption later.
+    /// Mirrors FoundationModelsMetadataRegistry's `MetadataIndex
+    /// .mergingEmbeddings`'s block-hash guard against exactly this shape of
+    /// race, generalized here to a direct text comparison.
+    ///
+    /// - Parameters:
+    ///   - embedding: the embedding to store.
+    ///   - id: the id to store it under.
+    ///   - expectedText: the text `embedding` was computed from; the write
+    ///     applies only if this still equals `id`'s current live text.
+    public mutating func setEmbedding(_ embedding: [Float], forID id: String, ifTextMatches expectedText: String) {
+        guard rows[id]?.text == expectedText else { return }
+        rows[id]?.embedding = embedding
+    }
 }
